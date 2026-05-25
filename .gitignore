@@ -72,3 +72,16 @@ ecosystem.config.*
 scripts/agSniffer/*
 gitbooks/*
 gitbook/README.md
+
+# Multi-tenant SaaS (Phase 1+)
+cloud/**/node_modules
+cloud/**/dist
+cloud/**/.next
+cloud/**/coverage
+cloud/.env
+cloud/.env.local
+
+# Local analysis state (not part of the repo)
+.omc/
+.understand-anything/
+

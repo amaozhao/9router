@@ -1,0 +1,23 @@
+{
+  "name": "@9router-cloud/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./db": "./src/db.js",
+    "./redis": "./src/redis.js",
+    "./crypto": "./src/crypto.js",
+    "./config": "./src/config.js",
+    "./logger": "./src/logger.js",
+    "./errors": "./src/errors.js"
+  },
+  "scripts": {
+    "test": "node --test src/**/*.test.js"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1",
+    "pg": "^8.13.1"
+  }
+}

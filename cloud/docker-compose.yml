@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: 9router-cloud-pg
+    environment:
+      POSTGRES_USER: router
+      POSTGRES_PASSWORD: router_dev_pw
+      POSTGRES_DB: router
+    ports:
+      - "55432:5432"
+    volumes:
+      - cloud_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U router -d router"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: 9router-cloud-redis
+    ports:
+      - "56379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - cloud_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  cloud_pg_data:
+  cloud_redis_data:

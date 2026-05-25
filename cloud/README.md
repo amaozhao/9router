@@ -93,6 +93,8 @@ open http://localhost:30300
 | `usage_events` | 用量事件流 | tenant_id, provider, model, tokens, cost_micros, status, latency_ms |
 | `usage_summaries` | 小时聚合 | (tenant_id, bucket_hour, provider, model) |
 
+> **Note:** `aliases` 和 `disabled_models` 两张表的 schema 已就位但当前代码尚未使用 — 预留给后续 v2(分别用于"用户取的模型短名映射"和"禁用特定模型清单"),与本期 Auto Routing 设计独立。
+
 ## 关键能力 - 验证状态
 
 | 能力 | 实现位置 | 验证测试 |

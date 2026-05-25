@@ -80,7 +80,7 @@ const server = http.createServer(async (req, res) => {
 
 function setCors(res) {
   res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('access-control-allow-headers', 'authorization,content-type');
 }
 

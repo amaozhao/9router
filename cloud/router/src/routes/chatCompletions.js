@@ -17,6 +17,8 @@ import { enforceRateLimit } from '../middleware/rateLimit.js';
 import { pickAccount, markCooldown } from '../services/accountPicker.js';
 import { recordUsage, getPricing, computeCost } from '../services/usage.js';
 import { resolveAttempts } from '../services/combo.js';
+import { classifyScenario } from '../services/scenarioClassifier.js';
+import { resolveScenarioTarget } from '../services/scenarioRouter.js';
 import { chatCompletion, streamChatCompletion } from '../providers/openaiCompatible.js';
 
 export async function handleChatCompletions(req, res) {
@@ -35,11 +37,23 @@ export async function handleChatCompletions(req, res) {
 
   // 2) Body
   const body = await readJson(req);
-  if (!body || !body.model) throw new ValidationError('Missing field: model');
+  if (!body) throw new ValidationError('Missing body');
   if (!Array.isArray(body.messages)) throw new ValidationError('Missing field: messages[]');
 
-  // 3) Attempts
-  const attempts = await resolveAttempts(ctx.tenantId, body.model);
+  // 3) Auto-routing: model="auto" or empty triggers content-based scenario routing.
+  //    Any other string (combo:slug, provider:model, bare model) bypasses the
+  //    classifier and reaches resolveAttempts as today.
+  const rawModel = (body.model ?? '').toString();
+  let effectiveModel = rawModel;
+  let routedScenario = null;
+  if (rawModel === '' || rawModel === 'auto') {
+    routedScenario = classifyScenario(body, 'openai');
+    effectiveModel = await resolveScenarioTarget(ctx.tenantId, routedScenario);
+    logger.info({ tenantId: ctx.tenantId, scenario: routedScenario, effectiveModel }, 'auto-routing');
+  }
+
+  // 4) Attempts
+  const attempts = await resolveAttempts(ctx.tenantId, effectiveModel);
   const isStream = body.stream === true;
 
   // 4) Try in order
@@ -74,7 +88,8 @@ export async function handleChatCompletions(req, res) {
       apiKeyId: ctx.apiKeyId,
       connectionId: account.connectionId,
       provider: attempt.provider,
-      model: body.model,
+      model: rawModel || 'auto',
+      routedModel: routedScenario ? effectiveModel : null,
       upstreamModel: attempt.upstreamModel,
       requestId,
     };

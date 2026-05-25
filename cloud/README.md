@@ -110,6 +110,7 @@ open http://localhost:30300
 | **Usage 小时聚合** | `worker/jobs/usageAggregator.js` | ✅ 6 events → 4 buckets, error_count 正确 |
 | **Per-tenant 隔离** | 全部 SQL 都带 `WHERE tenant_id = $N` | ✅ 跨租户查询不可见 |
 | **Per-tenant 计费** | `router/services/usage.js` + `getPricing()` | ✅ cost_micros = pt × $/tok + ct × $/tok |
+| **Per-tenant 自动模型切换 (model=auto)** | `router/services/scenarioClassifier.js` + `scenarioRouter.js` + `admin/routes/routing.js` | ✅ `scripts/verify-auto-routing.sh` 12 个断言 |
 | **管理 UI** | `admin-ui/` | ✅ HTTP + CORS |
 
 ## 客户端接入示例
@@ -140,6 +141,48 @@ Model:       combo:smart   (or openai:gpt-4 / glm:glm-4.6 / ...)
 }
 ```
 路由顺序尝试每个 provider，遇 429/5xx 自动 cooldown + 切换。
+
+## Auto Routing — 一次配置,按场景自动切换模型
+
+当客户端发请求时传 `model="auto"`(或省略),路由层会按请求内容自动分类到 6 个场景之一,然后查该租户预配置的 `场景 → target` 映射。其他显式 model 取值(`combo:slug`、`provider:model`)完全不走分类器。
+
+### 场景分类(服务端硬编码,优先级首个命中获胜)
+
+| 顺序 | 场景 | 判定 |
+|---|---|---|
+| 1 | `web` | `tools` 数组中 name 匹配 `/search\|web\|browse/i` |
+| 2 | `tool_use` | `tools` 数组非空 |
+| 3 | `vision` | 任意 message content 是 `image` / `image_url` / `image/*` |
+| 4 | `long_context` | 估算 prompt tokens > 64000 (chars/4) |
+| 5 | `think` | `reasoning_effort∈{high,max}` 或 `thinking.enabled=true` |
+| 6 | `default` | 兜底 |
+
+### 配置(Admin UI 或 REST)
+
+```bash
+# 设 default 场景
+curl -X PUT http://localhost:30200/api/routing/default \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"target":"combo:smart"}'
+
+# 设 long_context 场景
+curl -X PUT http://localhost:30200/api/routing/long_context \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"target":"anthropic:claude-3-5-sonnet-20241022"}'
+```
+
+target 必须是 `combo:<slug>` 或 `<provider>:<model>` 格式。`combo:<slug>` 在 PUT 时会校验该 combo 在本租户存在且 enabled。
+
+### 未配置场景的兜底
+
+- 该 scenario 未配 → 自动用该租户的 `default` 配置
+- `default` 也未配 → 请求返回 400 `Tenant has no default auto-routing target. Configure it in the dashboard.`
+
+### 审计
+
+`usage_events.routed_model` 列在客户端传 `model=auto` 时记录"实际选中的 target",显式 model 时为 NULL。
 
 ## 安全模型
 

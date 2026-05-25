@@ -20,6 +20,7 @@ import { listKeys, createKey, revokeKey } from './routes/apiKeys.js';
 import { listConnections, createConnection, updateConnection, deleteConnection } from './routes/connections.js';
 import { listCombos, createCombo, updateCombo, deleteCombo } from './routes/combos.js';
 import { summary as usageSummary, recent as usageRecent } from './routes/usage.js';
+import { listOauthProviders, startOauth, oauthCallback } from './routes/oauth.js';
 
 const log = logger.child({ svc: 'admin' });
 
@@ -44,6 +45,10 @@ const routes = [
 
   { method: 'GET',    pattern: '/api/usage/summary',    handler: usageSummary },
   { method: 'GET',    pattern: '/api/usage/recent',     handler: usageRecent },
+
+  { method: 'GET',    pattern: '/api/oauth/providers',          handler: listOauthProviders },
+  { method: 'POST',   pattern: '/api/oauth/:provider/start',    handler: startOauth },
+  { method: 'GET',    pattern: '/api/oauth/callback',           handler: oauthCallback },
 ];
 
 const server = http.createServer(async (req, res) => {

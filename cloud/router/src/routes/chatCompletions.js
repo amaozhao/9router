@@ -2,17 +2,21 @@
 // Pipeline:
 //   1. Edge-auth → tenant context
 //   2. Validate body
-//   3. Resolve provider via tenant settings / alias / direct
-//   4. AccountPicker → upstream connection
-//   5. Call upstream (stream or non-stream)
-//   6. On error: cooldown + bubble up (Phase 3 will add combo fallback)
-//   7. Record usage event
+//   3. resolveAttempts() — combo / explicit / heuristic produces N attempts
+//   4. For each attempt: pickAccount → call upstream → on retriable failure,
+//      cooldown that connection and move on; only the LAST failure surfaces.
+//   5. Record usage event (success or final failure)
 
 import crypto from 'node:crypto';
-import { logger, ValidationError, UpstreamError, AuthError } from '@9router-cloud/shared';
+import {
+  logger, ValidationError, UpstreamError, AuthError,
+  NoAccountAvailableError, AppError,
+} from '@9router-cloud/shared';
 import { resolveApiKey, enforceTenantActive } from '../middleware/edgeAuth.js';
+import { enforceRateLimit } from '../middleware/rateLimit.js';
 import { pickAccount, markCooldown } from '../services/accountPicker.js';
 import { recordUsage, getPricing, computeCost } from '../services/usage.js';
+import { resolveAttempts } from '../services/combo.js';
 import { chatCompletion, streamChatCompletion } from '../providers/openaiCompatible.js';
 
 export async function handleChatCompletions(req, res) {
@@ -26,66 +30,99 @@ export async function handleChatCompletions(req, res) {
   const ctx = await resolveApiKey(apiKey);
   enforceTenantActive(ctx);
 
-  // 2) Parse body
+  // 1b) Rate limit (per-key and per-tenant plan)
+  await enforceRateLimit(ctx);
+
+  // 2) Body
   const body = await readJson(req);
   if (!body || !body.model) throw new ValidationError('Missing field: model');
   if (!Array.isArray(body.messages)) throw new ValidationError('Missing field: messages[]');
 
-  // 3) Resolve provider — Phase 1: assume model is `<provider>:<upstream_model>`
-  //    or simply `<upstream_model>` (defaults to provider taken from settings).
-  const { provider, upstreamModel } = parseModel(body.model);
-
-  // 4) Pick account
-  const account = await pickAccount(ctx.tenantId, provider);
-
-  // 5) Build upstream call
-  const upstreamBody = { ...body, model: upstreamModel };
-  const baseUrl = account.metadata.base_url || defaultBaseUrl(provider);
-  if (!baseUrl) {
-    throw new ValidationError(`No base_url configured for provider "${provider}"`,
-      { provider, hint: 'set metadata.base_url on the connection' });
-  }
-  const upstreamApiKey = account.credentials.api_key;
-  if (!upstreamApiKey) {
-    throw new ValidationError('Connection has no api_key',
-      { connection_id: account.connectionId });
-  }
-
+  // 3) Attempts
+  const attempts = await resolveAttempts(ctx.tenantId, body.model);
   const isStream = body.stream === true;
 
-  const usageBase = {
-    tenantId: ctx.tenantId,
-    apiKeyId: ctx.apiKeyId,
-    connectionId: account.connectionId,
-    provider,
-    model: body.model,
-    upstreamModel,
-    requestId,
-  };
-
-  try {
-    if (isStream) {
-      await handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, account, usageBase, startedAt });
-    } else {
-      await handleNonStream({ res, baseUrl, upstreamApiKey, upstreamBody, account, usageBase, startedAt });
-    }
-  } catch (err) {
-    const latency = Date.now() - startedAt;
-    if (err instanceof UpstreamError) {
-      const status = err.meta?.status_code;
-      if (status === 429 || (status >= 500 && status < 600)) {
-        await markCooldown(ctx.tenantId, provider, account.connectionId);
+  // 4) Try in order
+  const errors = [];
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
+    let account;
+    try {
+      account = await pickAccount(ctx.tenantId, attempt.provider);
+    } catch (e) {
+      if (e instanceof NoAccountAvailableError) {
+        errors.push({ step: attempt.step, provider: attempt.provider, reason: e.message });
+        continue;
       }
-      await recordUsage({
-        ...usageBase, status: 'error', latencyMs: latency, errorCode: `upstream_${status || 'unknown'}`,
-        meta: { error: err.message },
-      });
+      throw e;
     }
-    throw err;
+
+    const baseUrl = account.metadata.base_url || defaultBaseUrl(attempt.provider);
+    if (!baseUrl) {
+      errors.push({ step: attempt.step, provider: attempt.provider, reason: `no base_url for ${attempt.provider}` });
+      continue;
+    }
+    const upstreamApiKey = account.credentials.api_key;
+    if (!upstreamApiKey) {
+      errors.push({ step: attempt.step, provider: attempt.provider, reason: 'connection missing api_key' });
+      continue;
+    }
+
+    const upstreamBody = { ...body, model: attempt.upstreamModel };
+    const usageBase = {
+      tenantId: ctx.tenantId,
+      apiKeyId: ctx.apiKeyId,
+      connectionId: account.connectionId,
+      provider: attempt.provider,
+      model: body.model,
+      upstreamModel: attempt.upstreamModel,
+      requestId,
+    };
+
+    try {
+      if (isStream) {
+        await handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, usageBase, startedAt, attemptIndex: i, totalAttempts: attempts.length });
+      } else {
+        await handleNonStream({ res, baseUrl, upstreamApiKey, upstreamBody, usageBase, startedAt });
+      }
+      return; // success — exit the attempts loop
+    } catch (err) {
+      const status = err instanceof UpstreamError ? err.meta?.status_code : null;
+      const retriable = status === 429 || (status >= 500 && status < 600) || !(err instanceof AppError);
+
+      // Cooldown the connection on 429/5xx
+      if (retriable && status) {
+        await markCooldown(ctx.tenantId, attempt.provider, account.connectionId);
+      }
+
+      // Record the error
+      await recordUsage({
+        ...usageBase,
+        status: 'error',
+        latencyMs: Date.now() - startedAt,
+        errorCode: status ? `upstream_${status}` : (err.code || 'unknown'),
+        meta: { error: err.message, attempt: attempt.step },
+      });
+
+      errors.push({ step: attempt.step, provider: attempt.provider, status, message: err.message });
+
+      // Headers already sent (mid-stream) → can't retry, bail
+      if (res.headersSent) throw err;
+
+      // Non-retriable client error → bail
+      if (!retriable) throw err;
+
+      // Otherwise fall through to the next attempt
+      continue;
+    }
   }
+
+  // All attempts exhausted
+  throw new UpstreamError('All upstream attempts failed',
+    { attempts: errors, hint: 'check provider availability or configure more connections' });
 }
 
-async function handleNonStream({ res, baseUrl, upstreamApiKey, upstreamBody, account, usageBase, startedAt }) {
+async function handleNonStream({ res, baseUrl, upstreamApiKey, upstreamBody, usageBase, startedAt }) {
   const result = await chatCompletion({ baseUrl, apiKey: upstreamApiKey, body: upstreamBody });
   const usage = result.usage || {};
   const promptTokens = usage.prompt_tokens || 0;
@@ -103,24 +140,29 @@ async function handleNonStream({ res, baseUrl, upstreamApiKey, upstreamBody, acc
   });
 }
 
-async function handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, account, usageBase, startedAt }) {
-  res.writeHead(200, {
-    'content-type': 'text/event-stream',
-    'cache-control': 'no-cache, no-transform',
-    'connection': 'keep-alive',
-  });
-
+async function handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, usageBase, startedAt, attemptIndex, totalAttempts }) {
   let promptTokens = 0;
   let completionTokens = 0;
 
   const ac = new AbortController();
   req.on('close', () => ac.abort());
 
+  // Important: we don't send headers until we get the first frame from upstream.
+  // That way, an early-failure attempt can be retried without already having
+  // committed to a 200 OK on the client connection.
+  let headersSent = false;
   for await (const frame of streamChatCompletion({
     baseUrl, apiKey: upstreamApiKey, body: upstreamBody, signal: ac.signal,
   })) {
+    if (!headersSent) {
+      res.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache, no-transform',
+        'connection': 'keep-alive',
+      });
+      headersSent = true;
+    }
     res.write(frame);
-    // Sniff usage if the provider emits a final `data: {"usage": ...}` frame
     const m = /"usage"\s*:\s*\{[^}]*"prompt_tokens"\s*:\s*(\d+)[^}]*"completion_tokens"\s*:\s*(\d+)/.exec(frame);
     if (m) { promptTokens = Number(m[1]); completionTokens = Number(m[2]); }
   }
@@ -134,25 +176,13 @@ async function handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, a
   });
 }
 
-function parseModel(model) {
-  const idx = model.indexOf(':');
-  if (idx > 0 && idx < model.length - 1) {
-    return { provider: model.slice(0, idx), upstreamModel: model.slice(idx + 1) };
-  }
-  // Heuristic for raw model id
-  if (model.startsWith('glm-')) return { provider: 'glm', upstreamModel: model };
-  if (model.startsWith('deepseek-')) return { provider: 'deepseek', upstreamModel: model };
-  if (model.startsWith('claude-')) return { provider: 'anthropic', upstreamModel: model };
-  if (model.startsWith('gemini-')) return { provider: 'gemini', upstreamModel: model };
-  return { provider: 'openai', upstreamModel: model };
-}
-
 function defaultBaseUrl(provider) {
   switch (provider) {
-    case 'openai':   return 'https://api.openai.com';
-    case 'glm':      return 'https://open.bigmodel.cn/api/paas/v4';
-    case 'deepseek': return 'https://api.deepseek.com';
-    case 'minimax':  return 'https://api.minimaxi.com';
+    case 'openai':    return 'https://api.openai.com';
+    case 'glm':       return 'https://open.bigmodel.cn/api/paas/v4';
+    case 'deepseek':  return 'https://api.deepseek.com';
+    case 'minimax':   return 'https://api.minimaxi.com';
+    case 'anthropic': return 'https://api.anthropic.com';
     default: return null;
   }
 }

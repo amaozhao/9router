@@ -18,6 +18,7 @@ import { matchRoute } from './lib/http.js';
 import { signup, login, me } from './routes/auth.js';
 import { listKeys, createKey, revokeKey } from './routes/apiKeys.js';
 import { listConnections, createConnection, updateConnection, deleteConnection } from './routes/connections.js';
+import { listCombos, createCombo, updateCombo, deleteCombo } from './routes/combos.js';
 import { summary as usageSummary, recent as usageRecent } from './routes/usage.js';
 
 const log = logger.child({ svc: 'admin' });
@@ -35,6 +36,11 @@ const routes = [
   { method: 'POST',   pattern: '/api/connections',      handler: createConnection },
   { method: 'PATCH',  pattern: '/api/connections/:id',  handler: updateConnection },
   { method: 'DELETE', pattern: '/api/connections/:id',  handler: deleteConnection },
+
+  { method: 'GET',    pattern: '/api/combos',           handler: listCombos },
+  { method: 'POST',   pattern: '/api/combos',           handler: createCombo },
+  { method: 'PATCH',  pattern: '/api/combos/:slug',     handler: updateCombo },
+  { method: 'DELETE', pattern: '/api/combos/:slug',     handler: deleteCombo },
 
   { method: 'GET',    pattern: '/api/usage/summary',    handler: usageSummary },
   { method: 'GET',    pattern: '/api/usage/recent',     handler: usageRecent },

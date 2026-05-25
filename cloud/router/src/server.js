@@ -5,6 +5,7 @@
 import http from 'node:http';
 import { config, logger, AppError, getRedis, closeRedis, closeDb } from '@9router-cloud/shared';
 import { handleChatCompletions } from './routes/chatCompletions.js';
+import { handleMessages } from './routes/messages.js';
 
 const log = logger.child({ svc: 'router' });
 
@@ -16,6 +17,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && req.url === '/v1/chat/completions') {
       return await handleChatCompletions(req, res);
+    }
+    if (req.method === 'POST' && req.url === '/v1/messages') {
+      return await handleMessages(req, res);
     }
     if (req.method === 'GET' && req.url === '/') {
       return jsonOk(res, { name: '9router-cloud', version: '0.1.0' });

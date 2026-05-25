@@ -1,0 +1,17 @@
+{
+  "name": "@9router-cloud/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@9router-cloud/shared": "file:../shared",
+    "ioredis": "^5.4.1",
+    "pg": "^8.13.1",
+    "undici": "^7.19.2"
+  }
+}

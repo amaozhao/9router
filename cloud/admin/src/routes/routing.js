@@ -5,7 +5,7 @@
 // PUT    /api/routing/:scenario     → upsert; body: { target: string }
 // DELETE /api/routing/:scenario     → delete; default scenario cannot be deleted
 
-import { query, NotFoundError, ValidationError, getRedis } from '@9router-cloud/shared';
+import { query, NotFoundError, ValidationError, invalidateTenantRouting } from '@9router-cloud/shared';
 import { readJson, ok, noContent } from '../lib/http.js';
 import { requireSession, requireRole } from '../middleware/sessionAuth.js';
 
@@ -54,7 +54,7 @@ export async function putRouting(req, res, { params }) {
      RETURNING scenario, target, updated_at`,
     [s.tenantId, scenario, trimmed],
   );
-  await invalidateCache(s.tenantId);
+  await invalidateTenantRouting(s.tenantId);
   ok(res, r.rows[0]);
 }
 
@@ -73,12 +73,8 @@ export async function deleteRouting(req, res, { params }) {
     [s.tenantId, scenario],
   );
   if (rowCount === 0) throw new NotFoundError(`Routing for scenario '${scenario}' not found`);
-  await invalidateCache(s.tenantId);
+  await invalidateTenantRouting(s.tenantId);
   noContent(res);
-}
-
-async function invalidateCache(tenantId) {
-  await getRedis().del(`routing:${tenantId}`);
 }
 
 async function validateTarget(tenantId, target) {

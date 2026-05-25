@@ -25,3 +25,11 @@ export async function closeRedis() {
     _client = null;
   }
 }
+
+export function tenantRoutingKey(tenantId) {
+  return `routing:${tenantId}`;
+}
+
+export async function invalidateTenantRouting(tenantId) {
+  await getRedis().del(tenantRoutingKey(tenantId));
+}

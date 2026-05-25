@@ -16,6 +16,7 @@ const server = http.createServer(async (req, res) => {
     }
     const userMsg = body.messages?.[body.messages.length - 1]?.content || '';
     const replyText = `pong: ${typeof userMsg === 'string' ? userMsg.slice(0, 50) : 'hi'}`;
+    res.setHeader('x-fake-received-model', body?.model ?? '');
     if (body.stream) {
       res.writeHead(200, {
         'content-type': 'text/event-stream',

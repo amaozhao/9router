@@ -233,7 +233,16 @@ ROUTED_AUTO=$(docker exec fastworkroom-postgres psql -U router -d router -tAc \
 assert_eq "usage_events.routed_model set when model=auto" "openai:fake-default" "$ROUTED_AUTO"
 
 # ────────────────────────────────────────────────────────────────
-# Assertion 11: Cross-tenant isolation — tenantA's routing rules
+# Assertion 11: usage_events.routed_model is NULL when client sent
+# an explicit non-auto model (classifier was bypassed). Assertion 9
+# above hit the router with model='openai:explicit-model'.
+# ────────────────────────────────────────────────────────────────
+ROUTED_EXPLICIT=$(docker exec fastworkroom-postgres psql -U router -d router -tAc \
+  "SELECT COALESCE(routed_model, 'NULL') FROM usage_events WHERE model='openai:explicit-model' AND tenant_id=${TENANT_A_ID} ORDER BY id DESC LIMIT 1" 2>/dev/null | tr -d '[:space:]')
+assert_eq "usage_events.routed_model NULL when client sent explicit model" "NULL" "$ROUTED_EXPLICIT"
+
+# ────────────────────────────────────────────────────────────────
+# Assertion 12: Cross-tenant isolation — tenantA's routing rules
 # not visible to tenantB
 # ────────────────────────────────────────────────────────────────
 LIST_B=$(curl -s -H "authorization: Bearer $TOKEN_B" http://localhost:30200/api/routing)

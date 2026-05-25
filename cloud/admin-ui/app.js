@@ -107,6 +107,7 @@ function Shell({ children, current, onNav }) {
     { key: 'api-keys',    label: 'API Keys' },
     { key: 'connections', label: 'Provider 连接' },
     { key: 'combos',      label: 'Combo 链' },
+    { key: 'routing',     label: 'Auto Routing' },
     { key: 'usage',       label: '用量' },
   ];
   return html`
@@ -482,6 +483,111 @@ function NewComboModal({ onClose, onCreated }) {
   `;
 }
 
+/* ─────────────────────────── Auto Routing ─────────────────────────── */
+
+const SCENARIO_META = [
+  { key: 'default',      label: 'Default',      desc: 'Fallback when no other scenario fires' },
+  { key: 'think',        label: 'Think',        desc: 'reasoning_effort=high or thinking.enabled' },
+  { key: 'long_context', label: 'Long Context', desc: '~64k+ tokens (chars/4 estimate)' },
+  { key: 'vision',       label: 'Vision',       desc: 'Any image part in messages' },
+  { key: 'tool_use',     label: 'Tool Use',     desc: 'Any tools array entry' },
+  { key: 'web',          label: 'Web',          desc: 'Tool name matches /search|web|browse/i' },
+];
+
+function AutoRouting() {
+  const [items, setItems] = useState([]);
+  const [combos, setCombos] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function load() {
+    setBusy(true); setErr(null);
+    try {
+      const [routing, comboData] = await Promise.all([
+        api('/api/routing'),
+        api('/api/combos').catch(() => ({ items: [] })),
+      ]);
+      setItems(routing.items || []);
+      setCombos(comboData.items || []);
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function save(scenario, target) {
+    setBusy(true); setErr(null);
+    try {
+      await api('/api/routing/' + encodeURIComponent(scenario), {
+        method: 'PUT',
+        body: JSON.stringify({ target }),
+      });
+      await load();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function remove(scenario) {
+    if (scenario === 'default') return;
+    setBusy(true); setErr(null);
+    try {
+      await api('/api/routing/' + encodeURIComponent(scenario), { method: 'DELETE' });
+      await load();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  return html`
+    <h1>Auto Routing</h1>
+    <p class="muted">当客户端发送 <span class="mono">model="auto"</span> 或省略 model 时，路由会自动分类请求并使用下面配置的目标。显式指定 model 的请求会绕过此逻辑。</p>
+    <div class="card">
+      ${err && html`<div class="error-text" style=${{ marginBottom: 12 }}>${err}</div>`}
+      <table>
+        <thead><tr><th>Scenario</th><th>Description</th><th>Target</th><th></th></tr></thead>
+        <tbody>
+          ${SCENARIO_META.map(meta => {
+            const cur = items.find(i => i.scenario === meta.key) || { target: null };
+            return html`<${RoutingRow}
+              key=${meta.key}
+              meta=${meta}
+              current=${cur}
+              combos=${combos}
+              onSave=${(t) => save(meta.key, t)}
+              onDelete=${meta.key === 'default' ? null : () => remove(meta.key)}
+              busy=${busy} />`;
+          })}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function RoutingRow({ meta, current, combos, onSave, onDelete, busy }) {
+  const [draft, setDraft] = useState(current.target || '');
+  useEffect(() => { setDraft(current.target || ''); }, [current.target]);
+  const dirty = (draft.trim() || null) !== current.target;
+  return html`
+    <tr>
+      <td><strong>${meta.label}</strong></td>
+      <td class="muted">${meta.desc}</td>
+      <td>
+        <input type="text" placeholder="combo:slug or provider:model"
+               list=${'combo-slugs-' + meta.key}
+               value=${draft} onInput=${(e) => setDraft(e.target.value)} />
+        <datalist id=${'combo-slugs-' + meta.key}>
+          ${(combos || []).map(c => html`<option key=${c.slug} value=${'combo:' + c.slug} />`)}
+        </datalist>
+      </td>
+      <td style=${{ whiteSpace: 'nowrap' }}>
+        <button class="btn" disabled=${busy || !dirty || !draft.trim()} onClick=${() => onSave(draft.trim())}>Save</button>
+        ${onDelete && current.target && html`
+          <button class="btn danger" style=${{ marginLeft: 4 }} disabled=${busy} onClick=${onDelete}>Clear</button>
+        `}
+      </td>
+    </tr>
+  `;
+}
+
 /* ─────────────────────────── Usage ─────────────────────────── */
 
 function Usage() {
@@ -528,6 +634,7 @@ function App() {
     case 'api-keys':    body = html`<${ApiKeys}/>`; break;
     case 'connections': body = html`<${Connections}/>`; break;
     case 'combos':      body = html`<${Combos}/>`; break;
+    case 'routing':     body = html`<${AutoRouting}/>`; break;
     case 'usage':       body = html`<${Usage}/>`; break;
     default:            body = html`<${Overview}/>`; break;
   }

@@ -117,7 +117,13 @@ export async function handleChatCompletions(req, res) {
     }
   }
 
-  // All attempts exhausted
+  // All attempts exhausted. If every attempt failed because no eligible account
+  // was available (vs upstream errors), report 503 (config / availability) rather
+  // than 502 (bad upstream response).
+  const allNoAccount = errors.length > 0 && errors.every(e => !e.status);
+  if (allNoAccount) {
+    throw new NoAccountAvailableError({ attempts: errors });
+  }
   throw new UpstreamError('All upstream attempts failed',
     { attempts: errors, hint: 'check provider availability or configure more connections' });
 }

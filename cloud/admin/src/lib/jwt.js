@@ -35,10 +35,18 @@ export function verifyJwt(token) {
   const expected = b64url(
     crypto.createHmac('sha256', config.jwtSecret).update(`${head}.${data}`).digest()
   );
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+  // Length mismatch would throw RangeError from timingSafeEqual; reject as bad sig.
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
     throw new AuthError('Bad signature');
   }
-  const payload = JSON.parse(b64urlDecode(data).toString('utf8'));
+  let payload;
+  try {
+    payload = JSON.parse(b64urlDecode(data).toString('utf8'));
+  } catch {
+    throw new AuthError('Malformed payload');
+  }
   if (typeof payload.exp === 'number' && payload.exp < Math.floor(Date.now() / 1000)) {
     throw new AuthError('Token expired');
   }

@@ -109,6 +109,10 @@ export async function handleMessages(req, res) {
       if (!retriable) throw err;
     }
   }
+  const allNoAccount = errors.length > 0 && errors.every(e => !e.status);
+  if (allNoAccount) {
+    throw new NoAccountAvailableError({ attempts: errors });
+  }
   throw new UpstreamError('All upstream attempts failed', { attempts: errors });
 }
 

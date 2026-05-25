@@ -56,7 +56,7 @@ export async function handleChatCompletions(req, res) {
   const attempts = await resolveAttempts(ctx.tenantId, effectiveModel);
   const isStream = body.stream === true;
 
-  // 4) Try in order
+  // 5) Try in order
   const errors = [];
   for (let i = 0; i < attempts.length; i++) {
     const attempt = attempts[i];

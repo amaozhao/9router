@@ -7,11 +7,11 @@ export async function recordUsage(event) {
   try {
     await query(`
       INSERT INTO usage_events (
-        tenant_id, api_key_id, connection_id, provider, model, upstream_model,
+        tenant_id, api_key_id, connection_id, provider, model, routed_model, upstream_model,
         prompt_tokens, completion_tokens, total_tokens, cost_micros,
         status, latency_ms, request_id, error_code, meta
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
       )
     `, [
       event.tenantId,
@@ -19,6 +19,7 @@ export async function recordUsage(event) {
       event.connectionId ?? null,
       event.provider,
       event.model,
+      event.routedModel ?? null,
       event.upstreamModel ?? null,
       event.promptTokens ?? 0,
       event.completionTokens ?? 0,
@@ -31,7 +32,6 @@ export async function recordUsage(event) {
       event.meta ? JSON.stringify(event.meta) : null,
     ]);
   } catch (err) {
-    // Recording usage must never break the response — log and swallow.
     logger.error({ err: err.message, event }, 'failed to record usage');
   }
 }

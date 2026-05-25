@@ -7,7 +7,7 @@
 
 import crypto from 'node:crypto';
 import {
-  ValidationError, UpstreamError, AuthError,
+  logger, ValidationError, UpstreamError, AuthError,
   NoAccountAvailableError, AppError,
 } from '@9router-cloud/shared';
 import { resolveApiKey, enforceTenantActive } from '../middleware/edgeAuth.js';
@@ -15,6 +15,8 @@ import { enforceRateLimit } from '../middleware/rateLimit.js';
 import { pickAccount, markCooldown } from '../services/accountPicker.js';
 import { recordUsage, getPricing, computeCost } from '../services/usage.js';
 import { resolveAttempts } from '../services/combo.js';
+import { classifyScenario } from '../services/scenarioClassifier.js';
+import { resolveScenarioTarget } from '../services/scenarioRouter.js';
 import { chatCompletion, streamChatCompletion } from '../providers/openaiCompatible.js';
 import {
   anthropicToOpenaiRequest,
@@ -37,11 +39,19 @@ export async function handleMessages(req, res) {
   await enforceRateLimit(ctx);
 
   const anthropicBody = await readJson(req);
-  if (!anthropicBody.model) throw new ValidationError('Missing field: model');
   if (!Array.isArray(anthropicBody.messages)) throw new ValidationError('Missing field: messages[]');
 
-  // The model string controls combo resolution exactly like /v1/chat/completions
-  const attempts = await resolveAttempts(ctx.tenantId, anthropicBody.model);
+  // Auto-routing: 'auto' or empty model triggers content-based scenario routing.
+  const rawModel = (anthropicBody.model ?? '').toString();
+  let effectiveModel = rawModel;
+  let routedScenario = null;
+  if (rawModel === '' || rawModel === 'auto') {
+    routedScenario = classifyScenario(anthropicBody, 'anthropic');
+    effectiveModel = await resolveScenarioTarget(ctx.tenantId, routedScenario);
+    logger.info({ tenantId: ctx.tenantId, scenario: routedScenario, effectiveModel }, 'auto-routing');
+  }
+
+  const attempts = await resolveAttempts(ctx.tenantId, effectiveModel);
   const isStream = anthropicBody.stream === true;
 
   const errors = [];
@@ -74,7 +84,8 @@ export async function handleMessages(req, res) {
       apiKeyId: ctx.apiKeyId,
       connectionId: account.connectionId,
       provider: attempt.provider,
-      model: anthropicBody.model,
+      model: rawModel || 'auto',
+      routedModel: routedScenario ? effectiveModel : null,
       upstreamModel: attempt.upstreamModel,
       requestId,
     };

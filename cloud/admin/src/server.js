@@ -19,6 +19,7 @@ import { signup, login, me } from './routes/auth.js';
 import { listKeys, createKey, revokeKey } from './routes/apiKeys.js';
 import { listConnections, createConnection, updateConnection, deleteConnection } from './routes/connections.js';
 import { listCombos, createCombo, updateCombo, deleteCombo } from './routes/combos.js';
+import { listRouting, putRouting, deleteRouting } from './routes/routing.js';
 import { summary as usageSummary, recent as usageRecent } from './routes/usage.js';
 import { listOauthProviders, startOauth, oauthCallback } from './routes/oauth.js';
 
@@ -42,6 +43,10 @@ const routes = [
   { method: 'POST',   pattern: '/api/combos',           handler: createCombo },
   { method: 'PATCH',  pattern: '/api/combos/:slug',     handler: updateCombo },
   { method: 'DELETE', pattern: '/api/combos/:slug',     handler: deleteCombo },
+
+  { method: 'GET',    pattern: '/api/routing',            handler: listRouting },
+  { method: 'PUT',    pattern: '/api/routing/:scenario',  handler: putRouting },
+  { method: 'DELETE', pattern: '/api/routing/:scenario',  handler: deleteRouting },
 
   { method: 'GET',    pattern: '/api/usage/summary',    handler: usageSummary },
   { method: 'GET',    pattern: '/api/usage/recent',     handler: usageRecent },

@@ -32,9 +32,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Register OAuth refreshers for known providers.
+	// Register OAuth refreshers for known providers. Generic RefreshOAuth2
+	// reads token_endpoint + client_id from the connection's encrypted
+	// credentials, so it works for any provider whose flow follows the
+	// OAuth2 refresh-token grant (openai, codex, cursor, anthropic, github…).
 	worker.Register("claude", worker.RefreshClaudeOAuth)
 	worker.Register("codex", worker.RefreshOAuth2)
+	worker.Register("openai", worker.RefreshOAuth2)
+	worker.Register("cursor", worker.RefreshOAuth2)
+	worker.Register("anthropic", worker.RefreshOAuth2)
+	worker.Register("github", worker.RefreshOAuth2)
 
 	worker.ScheduleAggregator(ctx, time.Duration(cfg.WorkerInterval)*time.Second)
 	worker.ScheduleRefresher(ctx, cfg.MasterKey, 30*time.Second)

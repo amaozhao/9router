@@ -74,8 +74,11 @@ func main() {
 	mux.HandleFunc("PATCH /api/combos/{slug}", d.UpdateCombo)
 	mux.HandleFunc("DELETE /api/combos/{slug}", d.DeleteCombo)
 
-	// OAuth (bring-your-own-token)
+	// OAuth: BYOT import + interactive PKCE flow.
 	mux.HandleFunc("POST /api/oauth/{provider}/import", d.ImportOAuth)
+	mux.HandleFunc("GET /api/oauth/providers", d.ListOAuthProviders)
+	mux.HandleFunc("POST /api/oauth/{provider}/start", d.StartOAuth)
+	mux.HandleFunc("GET /api/oauth/callback", d.OAuthCallback)
 
 	// Quota / tenants (super-admin)
 	mux.HandleFunc("GET /api/me/quota", d.MyQuota)

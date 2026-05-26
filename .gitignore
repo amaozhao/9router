@@ -1,87 +1,27 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# node deps + builds
+**/node_modules
+**/dist
+**/coverage
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/.next-cli-build/
-/out/
-cli/.build-home/
-product
-# production
-/build
-.idea/
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
+# env
+.env
+.env.*
 !.env.example
 
-# vercel
-.vercel
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.pem
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# logs / debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+.pnpm-debug.log*
 
-.bin/*
-data/
-logs/*
-source/*
-.cursor/*
-docs/*
-!docs/ARCHITECTURE.md
-test/*
-open-sse/test/*
-RM.vn.md
-RM.md
-cursor/*
-PUBLIC.md
-Thanks.md
-PUBLIC.en.md
-PR/*
-package-lock.json
-
-
-#Ignore vscode AI rules
-.github/instructions/codacy.instructions.md
-README1.md
-deploy*.sh
-ecosystem.config.*
-
-scripts/agSniffer/*
-gitbooks/*
-gitbook/README.md
-
-# Multi-tenant SaaS (Phase 1+)
-cloud/**/node_modules
-cloud/**/dist
-cloud/**/.next
-cloud/**/coverage
-cloud/.env
-cloud/.env.local
-
-# Local analysis state (not part of the repo)
+# local analysis state
+.claude/
 .omc/
+.omx/
 .understand-anything/
-

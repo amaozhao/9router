@@ -41,18 +41,18 @@
 
 | 服务 | 端口 | 进程入口 | 说明 |
 |---|---|---|---|
-| **Router** | 30100 | `cloud/router/src/server.js` | 客户端入口：`/v1/chat/completions`、`/v1/messages` |
-| **Admin REST** | 30200 | `cloud/admin/src/server.js` | 注册/登录、API Key、Connection、Combo、Usage、OAuth |
-| **Admin UI** | 30300 | `cloud/admin-ui/server.mjs` | 单文件 React SPA |
-| **Worker** | (none) | `cloud/worker/src/index.js` | usage 聚合 + OAuth token 刷新 |
-| Postgres | 55432 | docker | `cloud/docker-compose.yml` |
+| **Router** | 30100 | `router/src/server.js` | 客户端入口：`/v1/chat/completions`、`/v1/messages` |
+| **Admin REST** | 30200 | `admin/src/server.js` | 注册/登录、API Key、Connection、Combo、Usage、OAuth |
+| **Admin UI** | 30300 | `admin-ui/server.mjs` | 单文件 React SPA |
+| **Worker** | (none) | `worker/src/index.js` | usage 聚合 + OAuth token 刷新 |
+| Postgres | 55432 | docker | `docker-compose.yml` |
 | Redis | 56379 | docker | 同上 |
 
 ## 一句话快速跑起来
 
 ```bash
 # 1. 起依赖
-docker compose -f cloud/docker-compose.yml up -d
+docker compose -f docker-compose.yml up -d
 
 # 2. 设环境变量（每个进程都要）
 export DATABASE_URL='postgres://router:router_dev_pw@localhost:55432/router'
@@ -61,15 +61,15 @@ export CLOUD_MASTER_KEY="$(openssl rand -base64 32)"
 export JWT_SECRET="$(openssl rand -hex 32)"
 
 # 3. 初始化 schema
-cd cloud/scripts && npm install
+cd scripts && npm install
 node migrate.mjs
 
 # 4. 安装并启动四个服务（分别开终端）
-( cd cloud/shared    && npm install )
-( cd cloud/admin     && npm install && node src/server.js )    # :30200
-( cd cloud/router    && npm install && node src/server.js )    # :30100
-( cd cloud/worker    && npm install && node src/index.js  )    # background
-( cd cloud/admin-ui  && node server.mjs )                       # :30300
+( cd shared    && npm install )
+( cd admin     && npm install && node src/server.js )    # :30200
+( cd router    && npm install && node src/server.js )    # :30100
+( cd worker    && npm install && node src/index.js  )    # background
+( cd admin-ui  && node server.mjs )                       # :30300
 
 # 5. 打开 dashboard
 open http://localhost:30300
@@ -224,7 +224,7 @@ target 必须是 `combo:<slug>` 或 `<provider>:<model>` 格式。`combo:<slug>`
 ## 目录结构
 
 ```
-cloud/
+.
 ├── docker-compose.yml             # Postgres + Redis 本地依赖
 ├── .env.example                   # 所需环境变量
 ├── migrations/                    # SQL 迁移

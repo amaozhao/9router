@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Idempotent migration runner. Reads cloud/migrations/*.sql in lexical order
+// Idempotent migration runner. Reads migrations/*.sql in lexical order
 // and applies any not yet recorded in schema_migrations. Each migration is wrapped
 // in a single transaction together with the schema_migrations insert.
 

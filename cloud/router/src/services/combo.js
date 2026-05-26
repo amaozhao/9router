@@ -55,13 +55,18 @@ export async function resolveAttempts(tenantId, modelInput) {
     }];
   }
 
-  // Heuristic for raw model id (matches the historical 9router behaviour)
+  // Heuristic for raw model id (matches the historical 9router behaviour).
+  // GPT and o-series default to `codex` — the ChatGPT subscription path —
+  // because that's the only OpenAI-side route a user normally has without
+  // an API key. Callers who want the api-key OpenAI path can still send
+  // `openai:gpt-4` explicitly.
   let provider = 'openai';
   if (modelInput.startsWith('glm-')) provider = 'glm';
   else if (modelInput.startsWith('deepseek-')) provider = 'deepseek';
   else if (modelInput.startsWith('claude-')) provider = 'anthropic';
   else if (modelInput.startsWith('gemini-')) provider = 'gemini';
   else if (modelInput.startsWith('mock-')) provider = 'mock';
+  else if (/^(gpt-|o\d|chatgpt-)/i.test(modelInput)) provider = 'codex';
 
   return [{ provider, upstreamModel: modelInput, connectionId: null, step: 0, sourceCombo: null }];
 }

@@ -76,4 +76,25 @@ export async function chatCompletion({ baseUrl, apiKey, body, signal }) {
   }
 }
 
+/**
+ * Embeddings — POST {baseUrl}/v1/embeddings with OpenAI-shape body.
+ * Returns { data: [{embedding, index}], model, usage } verbatim.
+ */
+export async function embed({ baseUrl, apiKey, body, signal }) {
+  const url = trimSlash(baseUrl) + '/v1/embeddings';
+  const res = await undiciRequest(url, {
+    method: 'POST',
+    headers: { 'authorization': `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  const text = await res.body.text();
+  if (res.statusCode >= 400) {
+    throw new UpstreamError(`Upstream ${res.statusCode}: ${text.slice(0, 500)}`,
+      { status_code: res.statusCode, body: text });
+  }
+  try { return JSON.parse(text); }
+  catch { throw new UpstreamError('Upstream returned non-JSON', { body: text.slice(0, 500) }); }
+}
+
 function trimSlash(s) { return s.endsWith('/') ? s.slice(0, -1) : s; }

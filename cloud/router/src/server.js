@@ -7,6 +7,8 @@ import { config, logger, AppError, getRedis, closeRedis, closeDb } from '@laziro
 import { handleChatCompletions } from './routes/chatCompletions.js';
 import { handleMessages } from './routes/messages.js';
 import { handleResponses } from './routes/responses.js';
+import { handleEmbeddings } from './routes/embeddings.js';
+import { handleModels } from './routes/models.js';
 
 const log = logger.child({ svc: 'router' });
 
@@ -24,6 +26,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && req.url === '/v1/responses') {
       return await handleResponses(req, res);
+    }
+    if (req.method === 'POST' && req.url === '/v1/embeddings') {
+      return await handleEmbeddings(req, res);
+    }
+    if (req.method === 'GET' && req.url === '/v1/models') {
+      return await handleModels(req, res);
     }
     if (req.method === 'GET' && req.url === '/') {
       return jsonOk(res, { name: 'lazirouter-cloud', version: '0.1.0' });

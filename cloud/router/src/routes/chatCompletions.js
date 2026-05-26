@@ -202,6 +202,7 @@ async function handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, u
 function defaultBaseUrl(provider) {
   switch (provider) {
     case 'openai':    return 'https://api.openai.com';
+    case 'gemini':    return 'https://generativelanguage.googleapis.com/v1beta/openai';
     case 'glm':       return 'https://open.bigmodel.cn/api/paas/v4';
     case 'deepseek':  return 'https://api.deepseek.com';
     case 'minimax':   return 'https://api.minimaxi.com';

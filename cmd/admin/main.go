@@ -156,16 +156,36 @@ func withAccessLog(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := &statusRecorder{ResponseWriter: w, status: 200}
+		defer func() {
+			if rec := recover(); rec != nil {
+				logger.Error("handler panic",
+					"method", r.Method, "url", r.URL.Path, "panic", rec)
+				if !ww.headerWritten {
+					http.Error(ww, `{"error":{"code":"internal_error","message":"handler panic"}}`, http.StatusInternalServerError)
+					ww.status = http.StatusInternalServerError
+				}
+			}
+			logger.Info("http",
+				"method", r.Method, "url", r.URL.Path, "status", ww.status, "ms", time.Since(start).Milliseconds(),
+			)
+		}()
 		h.ServeHTTP(ww, r)
-		logger.Info("http",
-			"method", r.Method, "url", r.URL.Path, "status", ww.status, "ms", time.Since(start).Milliseconds(),
-		)
 	})
 }
 
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
+	status        int
+	headerWritten bool
 }
 
-func (s *statusRecorder) WriteHeader(c int) { s.status = c; s.ResponseWriter.WriteHeader(c) }
+func (s *statusRecorder) WriteHeader(c int) {
+	s.status = c
+	s.headerWritten = true
+	s.ResponseWriter.WriteHeader(c)
+}
+func (s *statusRecorder) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}

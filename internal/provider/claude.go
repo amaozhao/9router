@@ -243,6 +243,9 @@ func cloneMapAny(m map[string]any) map[string]any {
 	return out
 }
 
+// stringFrom is a tiny local helper. Duplicated from httpx.StringFrom to avoid
+// importing httpx into the provider package (which would create a cycle
+// through router→provider). Kept in sync with httpx.StringFrom.
 func stringFrom(m map[string]any, k string) string {
 	if s, ok := m[k].(string); ok {
 		return s

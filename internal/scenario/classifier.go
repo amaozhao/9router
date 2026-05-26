@@ -171,7 +171,7 @@ func ResolveTarget(ctx context.Context, tenantID int64, scn string) (string, err
 			return v, nil
 		}
 	}
-	return "", errs.Validation("Tenant has no default auto-routing target. Configure it in the dashboard.")
+	return "", errs.Validation("租户未配置 default 自动路由目标，请在管理后台 /api/routing/default 设置")
 }
 
 func loadRouting(ctx context.Context, tenantID int64) (map[string]string, error) {

@@ -310,12 +310,9 @@ func toI64(v any) int64 {
 	return 0
 }
 
-func stringFrom(m map[string]any, k string) string {
-	if v, ok := m[k].(string); ok {
-		return v
-	}
-	return ""
-}
+// stringFrom is kept as a package-local alias to httpx.StringFrom so existing
+// call sites in this file and embeddings.go / messages.go don't need updating.
+func stringFrom(m map[string]any, k string) string { return httpx.StringFrom(m, k) }
 
 func cloneMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))

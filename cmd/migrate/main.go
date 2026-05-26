@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/amaozhao/lazirouter/internal/config"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -105,10 +104,6 @@ func main() {
 		count++
 	}
 	fmt.Printf("Done. Applied %d new migration(s).\n", count)
-
-	// Touch the config package so the unused import lint doesn't fire when we
-	// later want to honour it from here. (No-op at runtime.)
-	_ = config.Loaded
 }
 
 func resolveDir() string {

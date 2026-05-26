@@ -170,14 +170,16 @@ echo "9) quota counter ticks"
 Q=$(curl -s -H "authorization: Bearer $TOK_B" localhost:$ADMIN_PORT/api/me/quota)
 USED=$(echo "$Q" | jq_get requests.used)
 TOK_USED=$(echo "$Q" | jq_get tokens.used)
-[ "$USED" -ge 3 ] && ok "requests.used $USED ≥ 3" || bad "requests.used" "got $USED"
-[ "$TOK_USED" -ge 12 ] && ok "tokens.used $TOK_USED ≥ 12" || bad "tokens.used" "got $TOK_USED"
+USED="${USED:-0}"
+TOK_USED="${TOK_USED:-0}"
+[ "$USED" -ge 3 ] 2>/dev/null && ok "requests.used $USED ≥ 3" || bad "requests.used" "got '$USED'"
+[ "$TOK_USED" -ge 12 ] 2>/dev/null && ok "tokens.used $TOK_USED ≥ 12" || bad "tokens.used" "got '$TOK_USED'"
 
 echo
 echo "10) auto-routing: 400 without routing, 200 after PUT"
 AUTO_NO=$(curl -s -X POST localhost:$ROUTER_PORT/v1/chat/completions -H "authorization: Bearer $KEY_B" -H 'content-type: application/json' \
   -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}')
-assert_contains "auto without routing → validation error" "no default auto-routing target" "$AUTO_NO"
+assert_contains "auto without routing → validation error" "default 自动路由目标" "$AUTO_NO"
 curl -s -X PUT "localhost:$ADMIN_PORT/api/routing/default" -H "authorization: Bearer $TOK_B" -H 'content-type: application/json' -d '{"target":"openai:gpt-4o-mini"}' > /dev/null
 AUTO_OK=$(curl -s -X POST localhost:$ROUTER_PORT/v1/chat/completions -H "authorization: Bearer $KEY_B" -H 'content-type: application/json' \
   -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}')

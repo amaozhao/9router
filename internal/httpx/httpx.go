@@ -88,3 +88,12 @@ func BearerOrXAPIKey(r *http.Request) string {
 	}
 	return r.Header.Get("x-api-key")
 }
+
+// StringFrom safely fetches a string field from a generic map[string]any.
+// Returns "" if missing or wrong type.
+func StringFrom(m map[string]any, k string) string {
+	if s, ok := m[k].(string); ok {
+		return s
+	}
+	return ""
+}

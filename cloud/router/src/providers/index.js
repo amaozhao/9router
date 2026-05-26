@@ -9,6 +9,7 @@
 
 import { chatCompletion as openaiChat, streamChatCompletion as openaiStream } from './openaiCompatible.js';
 import { chatMessages as claudeChat, streamChatMessages as claudeStream } from './claudeSubscription.js';
+import { responsesCall as codexCall, streamResponsesCall as codexStream } from './codexSubscription.js';
 
 export function getUpstream(provider) {
   switch (provider) {
@@ -20,6 +21,16 @@ export function getUpstream(provider) {
         },
         async *stream({ credentials, metadata, body, signal }) {
           for await (const f of claudeStream({ credentials, metadata, body, signal })) yield f;
+        },
+      };
+    case 'codex':
+      return {
+        kind: 'responses',
+        async chat({ credentials, metadata, body, signal, sessionContext }) {
+          return codexCall({ credentials, metadata, body, signal, sessionContext });
+        },
+        async *stream({ credentials, metadata, body, signal, sessionContext }) {
+          for await (const f of codexStream({ credentials, metadata, body, signal, sessionContext })) yield f;
         },
       };
     // Everything else speaks OpenAI Chat Completions; base_url + api_key on
@@ -40,4 +51,9 @@ export function getUpstream(provider) {
 /** Whether the upstream expects Anthropic shape natively (no translation). */
 export function isAnthropicNative(provider) {
   return provider === 'claude';
+}
+
+/** Whether the upstream expects OpenAI Responses-API shape natively. */
+export function isResponsesNative(provider) {
+  return provider === 'codex';
 }

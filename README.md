@@ -1,1318 +1,304 @@
-<div align="center">
-  <img src="./images/lazirouter.png?1" alt="LaziRouter Dashboard" width="800"/>
-  
-  # LaziRouter - FREE AI Router & Token Saver
-  
-  **Never stop coding. Save 20-40% tokens with RTK + auto-fallback to FREE & cheap AI models.**
-  
-  **Connect All AI Code Tools (Claude Code, Cursor, Antigravity, Copilot, Codex, Gemini, OpenCode, Cline, OpenClaw...) to 40+ AI Providers & 100+ Models.**
-  
-  [![npm](https://img.shields.io/npm/v/lazirouter.svg)](https://www.npmjs.com/package/lazirouter)
-  [![Downloads](https://img.shields.io/npm/dm/lazirouter.svg)](https://www.npmjs.com/package/lazirouter)
-  [![Docker Pulls](https://img.shields.io/docker/pulls/decolua/lazirouter.svg?logo=docker&label=Docker%20pulls)](https://hub.docker.com/r/decolua/lazirouter)
-  [![GHCR](https://img.shields.io/badge/GHCR-decolua%2Flazirouter-blue?logo=github)](https://github.com/decolua/lazirouter/pkgs/container/lazirouter)
-  [![License](https://img.shields.io/npm/l/lazirouter.svg)](https://github.com/decolua/lazirouter/blob/main/LICENSE)
+# lazirouter Cloud — Multi-tenant SaaS
 
-  <a href="https://trendshift.io/repositories/22628" target="_blank"><img src="https://trendshift.io/api/badge/repositories/22628" alt="decolua%2Flazirouter | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-  
-  [🚀 Quick Start](#-quick-start) • [💡 Features](#-key-features) • [📖 Setup](#-setup-guide) • [🌐 Website](https://lazirouter.com)
+云端多租户版 lazirouter。沿用 lazirouter 的协议路由、RTK 压缩、provider executor 等无状态核心理念，新增完整的租户隔离、加密凭证、Redis 化负载均衡、独立计费等 SaaS 能力。
 
-  [🇻🇳 Tiếng Việt](./i18n/README.vi.md) • [🇨🇳 中文](./i18n/README.zh-CN.md) • [🇯🇵 日本語](./i18n/README.ja-JP.md)
-</div>
-
----
-
-## 🤔 Why LaziRouter?
-
-**Stop wasting money, tokens and hitting limits:**
-
-- ❌ Subscription quota expires unused every month
-- ❌ Rate limits stop you mid-coding
-- ❌ Tool outputs (git diff, grep, ls...) burn tokens fast
-- ❌ Expensive APIs ($20-50/month per provider)
-- ❌ Manual switching between providers
-
-**LaziRouter solves this:**
-
-- ✅ **RTK Token Saver** - Auto-compress tool_result content, save 20-40% tokens per request
-- ✅ **Maximize subscriptions** - Track quota, use every bit before reset
-- ✅ **Auto fallback** - Subscription → Cheap → Free, zero downtime
-- ✅ **Multi-account** - Round-robin between accounts per provider
-- ✅ **Universal** - Works with Claude Code, Codex, Cursor, Cline, any CLI tool
-
----
-
-## 🔄 How It Works
+## 一句话说清楚架构
 
 ```
-┌─────────────┐
-│  Your CLI   │  (Claude Code, Codex, OpenClaw, Cursor, Cline...)
-│   Tool      │
-└──────┬──────┘
-       │ http://localhost:20128/v1
-       ↓
-┌─────────────────────────────────────────────┐
-│           LaziRouter (Smart Router)            │
-│  • RTK Token Saver (cut tool_result tokens) │
-│  • Format translation (OpenAI ↔ Claude)     │
-│  • Quota tracking                           │
-│  • Auto token refresh                       │
-└──────┬──────────────────────────────────────┘
-       │
-       ├─→ [Tier 1: SUBSCRIPTION] Claude Code, Codex, GitHub Copilot
-       │   ↓ quota exhausted
-       ├─→ [Tier 2: CHEAP] GLM ($0.6/1M), MiniMax ($0.2/1M)
-       │   ↓ budget limit
-       └─→ [Tier 3: FREE] Kiro, OpenCode Free, Vertex ($300 credits)
-
-Result: Never stop coding, minimal cost + 20-40% token savings via RTK
+              ┌───────────────────────────┐
+   client →  │  Edge Auth                 │  sk-lr-xxx → tenant
+   (Claude   │  Rate Limit                │  Redis cache (<1ms)
+   Code /    │  Combo / Account Picker    │  fallback + round-robin
+   Codex /   │  Translator (Anthropic↔   │  Redis-backed cursors & cooldowns
+   OpenCode) │   OpenAI when needed)      │
+              │  Upstream call             │  per-tenant decrypted creds
+              │  Usage event               │  → Postgres
+              └───────────────────────────┘
+                     ▲
+                     │
+         ┌───────────┴───────────┐
+         ▼                       ▼
+   ┌──────────┐           ┌───────────────┐
+   │ Postgres │           │     Redis     │
+   │ 11 表   │           │  hot path     │
+   └──────────┘           └───────────────┘
+         ▲                       ▲
+         │                       │
+   ┌─────┴────┐          ┌──────┴───────┐
+   │  Admin   │          │   Worker     │
+   │  REST    │          │  - aggregator│
+   │  (JWT)   │          │  - refresher │
+   └──────────┘          └──────────────┘
+         ▲
+         │  fetch / Bearer JWT
+         │
+   ┌─────┴────┐
+   │ admin-ui │  Single-file React SPA (esm.sh, no build)
+   └──────────┘
 ```
 
----
+## 服务端口
 
-## ⚡ Quick Start
+| 服务 | 端口 | 进程入口 | 说明 |
+|---|---|---|---|
+| **Router** | 30100 | `cloud/router/src/server.js` | 客户端入口：`/v1/chat/completions`、`/v1/messages` |
+| **Admin REST** | 30200 | `cloud/admin/src/server.js` | 注册/登录、API Key、Connection、Combo、Usage、OAuth |
+| **Admin UI** | 30300 | `cloud/admin-ui/server.mjs` | 单文件 React SPA |
+| **Worker** | (none) | `cloud/worker/src/index.js` | usage 聚合 + OAuth token 刷新 |
+| Postgres | 55432 | docker | `cloud/docker-compose.yml` |
+| Redis | 56379 | docker | 同上 |
 
-**1. Install globally:**
+## 一句话快速跑起来
 
 ```bash
-npm install -g lazirouter
-lazirouter
+# 1. 起依赖
+docker compose -f cloud/docker-compose.yml up -d
+
+# 2. 设环境变量（每个进程都要）
+export DATABASE_URL='postgres://router:router_dev_pw@localhost:55432/router'
+export REDIS_URL='redis://localhost:56379/0'
+export CLOUD_MASTER_KEY="$(openssl rand -base64 32)"
+export JWT_SECRET="$(openssl rand -hex 32)"
+
+# 3. 初始化 schema
+cd cloud/scripts && npm install
+node migrate.mjs
+
+# 4. 安装并启动四个服务（分别开终端）
+( cd cloud/shared    && npm install )
+( cd cloud/admin     && npm install && node src/server.js )    # :30200
+( cd cloud/router    && npm install && node src/server.js )    # :30100
+( cd cloud/worker    && npm install && node src/index.js  )    # background
+( cd cloud/admin-ui  && node server.mjs )                       # :30300
+
+# 5. 打开 dashboard
+open http://localhost:30300
 ```
 
-🎉 Dashboard opens at `http://localhost:20128`
-
-**2. Connect a FREE provider (no signup needed):**
-
-Dashboard → Providers → Connect **Kiro AI** (free Claude unlimited) or **OpenCode Free** (no auth) → Done!
-
-**3. Use in your CLI tool:**
-
-```
-Claude Code/Codex/OpenClaw/Cursor/Cline Settings:
-  Endpoint: http://localhost:20128/v1
-  API Key: [copy from dashboard]
-  Model: kr/claude-sonnet-4.5
-```
-
-**That's it!** Start coding with FREE AI models.
-
-**Alternative: run from source (this repository):**
-
-This repository package is private (`lazirouter-app`), so source/Docker execution is the expected local development path.
-
-```bash
-cp .env.example .env
-npm install
-PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
-```
-
-Production mode:
-
-```bash
-npm run build
-PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
-```
-
-Default URLs:
-- Dashboard: `http://localhost:20128/dashboard`
-- OpenAI-compatible API: `http://localhost:20128/v1`
-
----
-
-## Video Guides
-
-<div align="center">
-
-<table>
-  <tr>
-    <td align="center" width="320">
-      <a href="https://www.youtube.com/watch?v=raEyZPg5xE0">
-        <img src="https://img.youtube.com/vi/raEyZPg5xE0/maxresdefault.jpg" alt="LaziRouter Setup Tutorial" width="300"/>
-      </a><br/>
-      <b>🇺🇸 English</b><br/>
-      <sub>LaziRouter + Claude Code FREE Setup<br/>by <a href="https://www.youtube.com/@BuildAIWithHamid">Build AI With Hamid</a></sub>
-    </td>
-    <td align="center" width="320">
-      <a href="https://www.youtube.com/watch?v=X69n5Lm06Yw">
-        <img src="https://img.youtube.com/vi/X69n5Lm06Yw/maxresdefault.jpg" alt="Tiết kiệm chi phí LLM với LaziRouter" width="300"/>
-      </a><br/>
-      <b>🇻🇳 Tiếng Việt</b><br/>
-      <sub>Tiết kiệm chi phí LLM cho OpenClaw với LaziRouter<br/>by <a href="https://www.youtube.com/c/M%C3%ACAIblog">Mì AI</a></sub>
-    </td>
-    <td align="center" width="320">
-      <a href="https://www.youtube.com/watch?v=o3qYCyjrFYg">
-        <img src="https://img.youtube.com/vi/o3qYCyjrFYg/maxresdefault.jpg" alt="Claude Code FREE Forever" width="300"/>
-      </a><br/>
-      <b>🇺🇸 English</b><br/>
-      <sub>Claude Code FREE Forever — Unlimited Models<br/>by <a href="https://www.youtube.com/@BuildAIWithHamid">Build AI With Hamid</a></sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="320">
-      <a href="https://www.youtube.com/watch?v=Ttpc26m39Dw">
-        <img src="https://img.youtube.com/vi/Ttpc26m39Dw/maxresdefault.jpg" alt="Claude CLI Free Setup" width="300"/>
-      </a><br/>
-      <b>🇺🇸 English</b><br/>
-      <sub>Claude CLI Free Setup with LaziRouter 🚀<br/>by <a href="https://www.youtube.com/@CodeVerseSoban">CodeVerse Soban</a></sub>
-    </td>
-    <td align="center" width="320">
-      <a href="https://www.youtube.com/watch?v=G-5A_D5Pm6Y">
-        <img src="https://img.youtube.com/vi/G-5A_D5Pm6Y/maxresdefault.jpg" alt="Cài đặt OpenClaw Free A-Z" width="300"/>
-      </a><br/>
-      <b>🇻🇳 Tiếng Việt</b><br/>
-      <sub>Cài Đặt OpenClaw Free Từ A-Z + LaziRouter<br/>by <a href="https://www.youtube.com/@maigia">Mai Gia</a></sub>
-    </td>
-    <td align="center" width="320">
-      <a href="https://www.youtube.com/watch?v=JXmg8_gccgE">
-        <img src="https://img.youtube.com/vi/JXmg8_gccgE/maxresdefault.jpg" alt="FREE OpenClaw with Claude Opus" width="300"/>
-      </a><br/>
-      <b>🇺🇸 English</b><br/>
-      <sub>FREE OpenClaw + Claude Opus 4.6<br/>by <a href="https://www.youtube.com/@BuildAIWithHamid">Build AI With Hamid</a></sub>
-    </td>
-  </tr>
-</table>
-
-</div>
-
-> 🎬 **Made a video about LaziRouter?** Submit a [Pull Request](https://github.com/decolua/lazirouter/pulls) adding your video to this section — we'll merge it!
-
----
-
-## 🛠️ Supported CLI Tools
-
-LaziRouter works seamlessly with all major AI coding tools:
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" width="120">
-        <img src="./public/providers/claude.png" width="60" alt="Claude Code"/><br/>
-        <b>Claude-Code</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/openclaw.png" width="60" alt="OpenClaw"/><br/>
-        <b>OpenClaw</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/codex.png" width="60" alt="Codex"/><br/>
-        <b>Codex</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/opencode.png" width="60" alt="OpenCode"/><br/>
-        <b>OpenCode</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/cursor.png" width="60" alt="Cursor"/><br/>
-        <b>Cursor</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/antigravity.png" width="60" alt="Antigravity"/><br/>
-        <b>Antigravity</b>
-      </td>
-    </tr>
-    <tr>
-      <td align="center" width="120">
-        <img src="./public/providers/cline.png" width="60" alt="Cline"/><br/>
-        <b>Cline</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/continue.png" width="60" alt="Continue"/><br/>
-        <b>Continue</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/droid.png" width="60" alt="Droid"/><br/>
-        <b>Droid</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/roo.png" width="60" alt="Roo"/><br/>
-        <b>Roo</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/copilot.png" width="60" alt="Copilot"/><br/>
-        <b>Copilot</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/kilocode.png" width="60" alt="Kilo Code"/><br/>
-        <b>Kilo Code</b>
-      </td>
-    </tr>
-  </table>
-</div>
-
----
-
-## 🌐 Supported Providers
-
-### 🔐 OAuth Providers
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" width="120">
-        <img src="./public/providers/claude.png" width="60" alt="Claude Code"/><br/>
-        <b>Claude-Code</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/antigravity.png" width="60" alt="Antigravity"/><br/>
-        <b>Antigravity</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/codex.png" width="60" alt="Codex"/><br/>
-        <b>Codex</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/github.png" width="60" alt="GitHub"/><br/>
-        <b>GitHub</b>
-      </td>
-      <td align="center" width="120">
-        <img src="./public/providers/cursor.png" width="60" alt="Cursor"/><br/>
-        <b>Cursor</b>
-      </td>
-    </tr>
-  </table>
-</div>
-
-### 🆓 Free Providers
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" width="150">
-        <img src="./public/providers/kiro.png" width="70" alt="Kiro"/><br/>
-        <b>Kiro AI</b><br/>
-        <sub>Claude 4.5 + GLM-5 + MiniMax<br/>Unlimited FREE</sub>
-      </td>
-      <td align="center" width="150">
-        <img src="./public/providers/opencode.png" width="70" alt="OpenCode Free"/><br/>
-        <b>OpenCode Free</b><br/>
-        <sub>No auth • Auto-fetch models<br/>Unlimited FREE</sub>
-      </td>
-      <td align="center" width="150">
-        <img src="./public/providers/gemini.png" width="70" alt="Vertex AI"/><br/>
-        <b>Vertex AI</b><br/>
-        <sub>Gemini 3 Pro + GLM-5 + DeepSeek<br/>$300 credits free</sub>
-      </td>
-    </tr>
-  </table>
-</div>
-
-> **Note:** iFlow, Qwen and Gemini CLI free tiers were discontinued in 2026. Use Kiro / OpenCode Free / Vertex instead.
-
-### 🔑 API Key Providers (40+)
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" width="100">
-        <img src="./public/providers/openrouter.png" width="50" alt="OpenRouter"/><br/>
-        <sub>OpenRouter</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/glm.png" width="50" alt="GLM"/><br/>
-        <sub>GLM</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/kimi.png" width="50" alt="Kimi"/><br/>
-        <sub>Kimi</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/minimax.png" width="50" alt="MiniMax"/><br/>
-        <sub>MiniMax</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/openai.png" width="50" alt="OpenAI"/><br/>
-        <sub>OpenAI</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/anthropic.png" width="50" alt="Anthropic"/><br/>
-        <sub>Anthropic</sub>
-      </td>
-    </tr>
-    <tr>
-      <td align="center" width="100">
-        <img src="./public/providers/gemini.png" width="50" alt="Gemini"/><br/>
-        <sub>Gemini</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/deepseek.png" width="50" alt="DeepSeek"/><br/>
-        <sub>DeepSeek</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/groq.png" width="50" alt="Groq"/><br/>
-        <sub>Groq</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/xai.png" width="50" alt="xAI"/><br/>
-        <sub>xAI</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/mistral.png" width="50" alt="Mistral"/><br/>
-        <sub>Mistral</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/perplexity.png" width="50" alt="Perplexity"/><br/>
-        <sub>Perplexity</sub>
-      </td>
-    </tr>
-    <tr>
-      <td align="center" width="100">
-        <img src="./public/providers/together.png" width="50" alt="Together"/><br/>
-        <sub>Together AI</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/fireworks.png" width="50" alt="Fireworks"/><br/>
-        <sub>Fireworks</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/cerebras.png" width="50" alt="Cerebras"/><br/>
-        <sub>Cerebras</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/cohere.png" width="50" alt="Cohere"/><br/>
-        <sub>Cohere</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/nvidia.png" width="50" alt="NVIDIA"/><br/>
-        <sub>NVIDIA</sub>
-      </td>
-      <td align="center" width="100">
-        <img src="./public/providers/siliconflow.png" width="50" alt="SiliconFlow"/><br/>
-        <sub>SiliconFlow</sub>
-      </td>
-    </tr>
-  </table>
-  <p><i>...and 20+ more providers including Nebius, Chutes, Hyperbolic, and custom OpenAI/Anthropic compatible endpoints</i></p>
-</div>
-
----
-
-## 💡 Key Features
-
-| Feature | What It Does | Why It Matters |
-|---------|--------------|----------------|
-| 🚀 **RTK Token Saver** ([RTK](https://github.com/rtk-ai/rtk) ⭐40K) | Compress tool outputs (`git diff`, `grep`, `ls`, `tree`...) before sending to LLM | Save **20-40% input tokens** per request |
-| 🪨 **Caveman Mode** ([Caveman](https://github.com/JuliusBrussee/caveman) ⭐52K) | Inject caveman-speak prompt → LLM replies terse, technical substance preserved | Save **up to 65% output tokens** |
-| 🎯 **Smart 3-Tier Fallback** | Auto-route: Subscription → Cheap → Free | Never stop coding, zero downtime |
-| 📊 **Real-Time Quota Tracking** | Live token count + reset countdown | Maximize subscription value |
-| 🔄 **Format Translation** | OpenAI ↔ Claude ↔ Gemini ↔ Cursor ↔ Kiro ↔ Vertex | Works with any CLI tool |
-| 👥 **Multi-Account Support** | Multiple accounts per provider | Load balancing + redundancy |
-| 🔄 **Auto Token Refresh** | OAuth tokens refresh automatically | No manual re-login needed |
-| 🎨 **Custom Combos** | Create unlimited model combinations | Tailor fallback to your needs |
-| 📝 **Request Logging** | Debug mode with full request/response logs | Troubleshoot issues easily |
-| 💾 **Cloud Sync** | Sync config across devices | Same setup everywhere |
-| 📊 **Usage Analytics** | Track tokens, cost, trends over time | Optimize spending |
-| 🌐 **Deploy Anywhere** | Localhost, VPS, Docker, Cloudflare Workers | Flexible deployment options |
-
-<details>
-<summary><b>📖 Feature Details</b></summary>
-
-### 🚀 RTK Token Saver
-
-Tool outputs (`git diff`, `grep`, `find`, `ls`, `tree`, log dumps...) often eat 30-50% of your prompt budget. RTK detects them and applies smart, lossless compression **before** the request hits the LLM:
-
-- **Filters:** `git-diff`, `git-status`, `grep`, `find`, `ls`, `tree`, `dedup-log`, `smart-truncate`, `read-numbered`, `search-list`
-- **Auto-detect:** No config needed — RTK peeks the first 1KB of each `tool_result` and picks the right filter.
-- **Safe by design:** If a filter fails, throws, or makes output bigger, RTK silently keeps the original text. Errors never break your request.
-- **Universal:** Works across all formats (OpenAI, Claude, Gemini, Cursor, Kiro, OpenAI Responses) because it runs **before** any format translation.
-- **Default ON:** Toggle anytime in Dashboard → Endpoint settings.
-
-```
-Without RTK: 47K tokens sent to LLM
-With RTK:    28K tokens sent to LLM   (40% saved · same context · same answer)
-```
-
-### 🎯 Smart 3-Tier Fallback
-
-Create combos with automatic fallback:
-
-```
-Combo: "my-coding-stack"
-  1. cc/claude-opus-4-6        (your subscription)
-  2. glm/glm-4.7               (cheap backup, $0.6/1M)
-  3. if/kimi-k2-thinking       (free fallback)
-
-→ Auto switches when quota runs out or errors occur
-```
-
-### 📊 Real-Time Quota Tracking
-
-- Token consumption per provider
-- Reset countdown (5-hour, daily, weekly)
-- Cost estimation for paid tiers
-- Monthly spending reports
-
-### 🔄 Format Translation
-
-Seamless translation between formats:
-- **OpenAI** ↔ **Claude** ↔ **Gemini** ↔ **Cursor** ↔ **Kiro** ↔ **Vertex** ↔ **Antigravity** ↔ **Ollama** ↔ **OpenAI Responses**
-- Your CLI tool sends OpenAI format → LaziRouter translates → Provider receives native format
-- Works with any tool that supports custom OpenAI endpoints
-
-### 👥 Multi-Account Support
-
-- Add multiple accounts per provider
-- Auto round-robin or priority-based routing
-- Fallback to next account when one hits quota
-
-### 🔄 Auto Token Refresh
-
-- OAuth tokens automatically refresh before expiration
-- No manual re-authentication needed
-- Seamless experience across all providers
-
-### 🎨 Custom Combos
-
-- Create unlimited model combinations
-- Mix subscription, cheap, and free tiers
-- Name your combos for easy access
-- Share combos across devices with Cloud Sync
-
-### 📝 Request Logging
-
-- Enable debug mode for full request/response logs
-- Track API calls, headers, and payloads
-- Troubleshoot integration issues
-- Export logs for analysis
-
-### 💾 Cloud Sync
-
-- Sync providers, combos, and settings across devices
-- Automatic background sync
-- Secure encrypted storage
-- Access your setup from anywhere
-
-#### Cloud Runtime Notes
-
-- Prefer server-side cloud variables in production:
-  - `BASE_URL` (internal callback URL used by sync scheduler)
-  - `CLOUD_URL` (cloud sync endpoint base)
-- `NEXT_PUBLIC_BASE_URL` and `NEXT_PUBLIC_CLOUD_URL` are still supported for compatibility/UI, but server runtime now prioritizes `BASE_URL`/`CLOUD_URL`.
-- Cloud sync requests now use timeout + fail-fast behavior to avoid UI hanging when cloud DNS/network is unavailable.
-
-### 📊 Usage Analytics
-
-- Track token usage per provider and model
-- Cost estimation and spending trends
-- Monthly reports and insights
-- Optimize your AI spending
-
-> **💡 IMPORTANT - Understanding Dashboard Costs:**
-> 
-> The "cost" displayed in Usage Analytics is **for tracking and comparison purposes only**. 
-> LaziRouter itself **never charges** you anything. You only pay providers directly (if using paid services).
-> 
-> **Example:** If your dashboard shows "$290 total cost" while using iFlow models, this represents 
-> what you would have paid using paid APIs directly. Your actual cost = **$0** (iFlow is free unlimited).
-> 
-> Think of it as a "savings tracker" showing how much you're saving by using free models or 
-> routing through LaziRouter!
-
-### 🌐 Deploy Anywhere
-
-- 💻 **Localhost** - Default, works offline
-- ☁️ **VPS/Cloud** - Share across devices
-- 🐳 **Docker** - One-command deployment
-- 🚀 **Cloudflare Workers** - Global edge network
-
-</details>
-
----
-
-## 💰 Pricing at a Glance
-
-| Tier | Provider | Cost | Quota Reset | Best For |
-|------|----------|------|-------------|----------|
-| **🚀 TOKEN SAVER** | **RTK (built-in)** | **FREE** | Always on | **Save 20-40% tokens on EVERY request** |
-| **💳 SUBSCRIPTION** | Claude Code (Pro/Max) | $20-200/mo | 5h + weekly | Already subscribed |
-| | Codex (Plus/Pro) | $20-200/mo | 5h + weekly | OpenAI users |
-| | GitHub Copilot | $10-19/mo | Monthly | GitHub users |
-| | Cursor IDE | $20/mo | Monthly | Cursor users |
-| **💰 CHEAP** | GLM-5.1 / GLM-4.7 | $0.6/1M | Daily 10AM | Budget backup |
-| | MiniMax M2.7 | $0.2/1M | 5-hour rolling | Cheapest option |
-| | Kimi K2.5 | $9/mo flat | 10M tokens/mo | Predictable cost |
-| **🆓 FREE** | Kiro AI | $0 | Unlimited | Claude 4.5 + GLM-5 + MiniMax free |
-| | OpenCode Free | $0 | Unlimited | No auth, auto-fetch models |
-| | Vertex AI | $300 credits | New GCP accounts | Gemini 3 Pro + DeepSeek + GLM-5 |
-
-**💡 Pro Tip:** RTK + Kiro AI + OpenCode Free combo = **$0 cost + 20-40% token savings**!
-
----
-
-### 📊 Understanding LaziRouter Costs & Billing
-
-**LaziRouter Billing Reality:**
-
-✅ **LaziRouter software = FREE forever** (open source, never charges)  
-✅ **Dashboard "costs" = Display/tracking only** (not actual bills)  
-✅ **You pay providers directly** (subscriptions or API fees)  
-✅ **FREE providers stay FREE** (iFlow, Kiro, Qwen = $0 unlimited)  
-❌ **LaziRouter never sends invoices** or charges your card
-
-**How Cost Display Works:**
-
-The dashboard shows **estimated costs** as if you were using paid APIs directly. This is **not billing** - it's a comparison tool to show your savings.
-
-**Example Scenario:**
-```
-Dashboard Display:
-• Total Requests: 1,662
-• Total Tokens: 47M
-• Display Cost: $290
-
-Reality Check:
-• Provider: iFlow (FREE unlimited)
-• Actual Payment: $0.00
-• What $290 Means: Amount you SAVED by using free models!
-```
-
-**Payment Rules:**
-- **Subscription providers** (Claude Code, Codex): Pay them directly via their websites
-- **Cheap providers** (GLM, MiniMax): Pay them directly, LaziRouter just routes
-- **FREE providers** (iFlow, Kiro, Qwen): Genuinely free forever, no hidden charges
-- **LaziRouter**: Never charges anything, ever
-
----
-
-## 🎯 Use Cases
-
-### Case 1: "I have Claude Pro subscription"
-
-**Problem:** Quota expires unused, rate limits during heavy coding
-
-**Solution:**
-```
-Combo: "maximize-claude"
-  1. cc/claude-opus-4-7        (use subscription fully)
-  2. glm/glm-5.1               (cheap backup when quota out)
-  3. kr/claude-sonnet-4.5      (free emergency fallback)
-
-Monthly cost: $20 (subscription) + ~$5 (backup) = $25 total
-vs. $20 + hitting limits = frustration
-```
-
-### Case 2: "I want zero cost"
-
-**Problem:** Can't afford subscriptions, need reliable AI coding
-
-**Solution:**
-```
-Combo: "free-forever"
-  1. kr/claude-sonnet-4.5      (Claude 4.5 free unlimited)
-  2. kr/glm-5                  (GLM-5 free via Kiro)
-  3. oc/<auto>                 (OpenCode Free, no auth)
-
-Monthly cost: $0
-Quality: Production-ready models + RTK saves 20-40% tokens
-```
-
-### Case 3: "I need 24/7 coding, no interruptions"
-
-**Problem:** Deadlines, can't afford downtime
-
-**Solution:**
-```
-Combo: "always-on"
-  1. cc/claude-opus-4-7        (best quality)
-  2. cx/gpt-5.5                (second subscription)
-  3. glm/glm-5.1               (cheap, resets daily)
-  4. minimax/MiniMax-M2.7      (cheapest, 5h reset)
-  5. kr/claude-sonnet-4.5      (free unlimited)
-
-Result: 5 layers of fallback = zero downtime
-Monthly cost: $20-200 (subscriptions) + $10-20 (backup)
-```
-
-### Case 4: "I want FREE AI in OpenClaw"
-
-**Problem:** Need AI assistant in messaging apps (WhatsApp, Telegram, Slack...), completely free
-
-**Solution:**
-```
-Combo: "openclaw-free"
-  1. kr/claude-sonnet-4.5      (Claude 4.5 free)
-  2. kr/glm-5                  (GLM-5 free)
-  3. kr/MiniMax-M2.5           (MiniMax free)
-
-Monthly cost: $0
-Access via: WhatsApp, Telegram, Slack, Discord, iMessage, Signal...
-```
-
----
-
-## ❓ Frequently Asked Questions
-
-<details>
-<summary><b>📊 Why does my dashboard show high costs?</b></summary>
-
-The dashboard tracks your token usage and displays **estimated costs** as if you were using paid APIs directly. This is **not actual billing** - it's a reference to show how much you're saving by using free models or existing subscriptions through LaziRouter.
-
-**Example:**
-- **Dashboard shows:** "$290 total cost"
-- **Reality:** You're using iFlow (FREE unlimited)
-- **Your actual cost:** **$0.00**
-- **What $290 means:** Amount you **saved** by using free models instead of paid APIs!
-
-The cost display is a "savings tracker" to help you understand your usage patterns and optimization opportunities.
-
-</details>
-
-<details>
-<summary><b>💳 Will I be charged by LaziRouter?</b></summary>
-
-**No.** LaziRouter is free, open-source software that runs on your own computer. It never charges you anything.
-
-**You only pay:**
-- ✅ **Subscription providers** (Claude Code $20/mo, Codex $20-200/mo) → Pay them directly on their websites
-- ✅ **Cheap providers** (GLM, MiniMax) → Pay them directly, LaziRouter just routes your requests
-- ❌ **LaziRouter itself** → **Never charges anything, ever**
-
-LaziRouter is a local proxy/router. It doesn't have your credit card, can't send invoices, and has no billing system. It's completely free software.
-
-</details>
-
-<details>
-<summary><b>🆓 Are FREE providers really unlimited?</b></summary>
-
-**Yes!** The current FREE providers (Kiro, OpenCode Free, Vertex) are genuinely free with **no hidden charges**.
-
-These are free services offered by those respective companies:
-- **Kiro AI**: Free unlimited Claude 4.5 + GLM-5 + MiniMax via AWS Builder ID / Google / GitHub OAuth
-- **OpenCode Free**: No-auth passthrough proxy, models auto-fetched from `opencode.ai/zen/v1/models`
-- **Vertex AI**: $300 free credits for new Google Cloud accounts (90 days)
-
-LaziRouter just routes your requests to them - there's no "catch" or future billing. They're truly free services, and LaziRouter makes them easy to use with fallback support.
-
-**Discontinued free tiers (no longer recommended):**
-- ❌ **iFlow**: Was free unlimited, now changed to paid (2026)
-- ❌ **Qwen Code**: Free OAuth tier discontinued by Alibaba on 2026-04-15
-- ❌ **Gemini CLI**: Still works, but using it with non-CLI tools (Claude, Codex, Cursor...) may result in account bans — only use if you stick to Gemini CLI itself
-
-</details>
-
-<details>
-<summary><b>💰 How do I minimize my actual AI costs?</b></summary>
-
-**Free-First Strategy:**
-
-1. **Start with 100% free combo:**
-   ```
-   1. gc/gemini-3-flash (180K/month free from Google)
-   2. if/kimi-k2-thinking (unlimited free from iFlow)
-   3. qw/qwen3-coder-plus (unlimited free from Qwen)
-   ```
-   **Cost: $0/month**
-
-2. **Add cheap backup** only if you need it:
-   ```
-   4. glm/glm-4.7 ($0.6/1M tokens)
-   ```
-   **Additional cost: Only pay for what you actually use**
-
-3. **Use subscription providers last:**
-   - Only if you already have them
-   - LaziRouter helps maximize their value through quota tracking
-
-**Result:** Most users can operate at $0/month using only free tiers!
-
-</details>
-
-<details>
-<summary><b>📈 What if my usage suddenly spikes?</b></summary>
-
-LaziRouter's smart fallback prevents surprise charges:
-
-**Scenario:** You're on a coding sprint and blow through your quotas
-
-**Without LaziRouter:**
-- ❌ Hit rate limit → Work stops → Frustration
-- ❌ Or: Accidentally rack up huge API bills
-
-**With LaziRouter:**
-- ✅ Subscription hits limit → Auto-fallback to cheap tier
-- ✅ Cheap tier gets expensive → Auto-fallback to free tier
-- ✅ Never stop coding → Predictable costs
-
-**You're in control:** Set spending limits per provider in dashboard, and LaziRouter respects them.
-
-</details>
-
----
-
-## 📖 Setup Guide
-
-<details>
-<summary><b>🔐 Subscription Providers (Maximize Value)</b></summary>
-
-### Claude Code (Pro/Max)
-
-```bash
-Dashboard → Providers → Connect Claude Code
-→ OAuth login → Auto token refresh
-→ 5-hour + weekly quota tracking
-
-Models:
-  cc/claude-opus-4-7
-  cc/claude-opus-4-6
-  cc/claude-sonnet-4-6
-  cc/claude-haiku-4-5-20251001
-```
-
-**Pro Tip:** Use Opus for complex tasks, Sonnet for speed. LaziRouter tracks quota per model!
-
-### OpenAI Codex (Plus/Pro)
-
-```bash
-Dashboard → Providers → Connect Codex
-→ OAuth login (port 1455)
-→ 5-hour + weekly reset
-
-Models:
-  cx/gpt-5.5
-  cx/gpt-5.4
-  cx/gpt-5.3-codex
-  cx/gpt-5.2-codex
-```
-
-### GitHub Copilot
-
-```bash
-Dashboard → Providers → Connect GitHub
-→ OAuth via GitHub
-→ Monthly reset (1st of month)
-
-Models:
-  gh/gpt-5.4
-  gh/claude-opus-4.7
-  gh/claude-sonnet-4.6
-  gh/gemini-3.1-pro-preview
-  gh/grok-code-fast-1
-```
-
-### Cursor IDE
-
-```bash
-Dashboard → Providers → Connect Cursor
-→ OAuth login
-→ Monthly subscription
-
-Models:
-  cu/claude-4.6-opus-max
-  cu/claude-4.5-sonnet-thinking
-  cu/gpt-5.3-codex
-```
-
-</details>
-
-<details>
-<summary><b>💰 Cheap Providers (Backup)</b></summary>
-
-### GLM-5.1 / GLM-4.7 (Daily reset, $0.6/1M)
-
-1. Sign up: [Zhipu AI](https://open.bigmodel.cn/)
-2. Get API key from Coding Plan
-3. Dashboard → Add API Key:
-   - Provider: `glm`
-   - API Key: `your-key`
-
-**Use:** `glm/glm-5.1`, `glm/glm-5`, `glm/glm-4.7`
-
-**Pro Tip:** Coding Plan offers 3× quota at 1/7 cost! Reset daily 10:00 AM.
-
-### MiniMax M2.7 (5h reset, $0.20/1M)
-
-1. Sign up: [MiniMax](https://www.minimax.io/)
-2. Get API key
-3. Dashboard → Add API Key
-
-**Use:** `minimax/MiniMax-M2.7`, `minimax/MiniMax-M2.5`
-
-**Pro Tip:** Cheapest option for long context (1M tokens)!
-
-### Kimi K2.5 ($9/month flat)
-
-1. Subscribe: [Moonshot AI](https://platform.moonshot.ai/)
-2. Get API key
-3. Dashboard → Add API Key
-
-**Use:** `kimi/kimi-k2.5`, `kimi/kimi-k2.5-thinking`
-
-**Pro Tip:** Fixed $9/month for 10M tokens = $0.90/1M effective cost!
-
-</details>
-
-<details>
-<summary><b>🆓 FREE Providers (Recommended)</b></summary>
-
-### Kiro AI (Claude 4.5 + GLM-5 + MiniMax FREE)
-
-```bash
-Dashboard → Connect Kiro
-→ AWS Builder ID, AWS IAM Identity Center, Google, or GitHub
-→ Unlimited usage
-
-Models:
-  kr/claude-sonnet-4.5
-  kr/claude-haiku-4.5
-  kr/glm-5
-  kr/MiniMax-M2.5
-  kr/qwen3-coder-next
-  kr/deepseek-3.2
-```
-
-**Pro Tip:** Best free option for Claude. No API key, no payment, fully unlimited.
-
-### OpenCode Free (No auth, auto-fetch models)
-
-```bash
-Dashboard → Connect OpenCode Free
-→ No login required (passthrough proxy)
-→ Models auto-fetched from opencode.ai/zen/v1/models
-```
-
-**Pro Tip:** Fastest setup. Just connect and start coding.
-
-### Vertex AI ($300 free credits for new GCP accounts)
-
-```bash
-Dashboard → Connect Vertex AI
-→ Upload Google Cloud Service Account JSON
-→ Enable Vertex AI API in your GCP project
-
-Models:
-  vertex/gemini-3.1-pro-preview
-  vertex/gemini-3-flash-preview
-  vertex/gemini-2.5-flash
-
-Vertex Partner (Anthropic / DeepSeek / GLM / Qwen via Vertex):
-  vertex-partner/glm-5-maas
-  vertex-partner/deepseek-v3.2-maas
-  vertex-partner/qwen3-next-80b-a3b-thinking-maas
-```
-
-**Pro Tip:** New Google Cloud accounts get $300 credits free for 90 days. Plenty for daily coding.
-
-</details>
-
-<details>
-<summary><b>🎨 Create Combos</b></summary>
-
-### Example 1: Maximize Subscription → Cheap Backup
-
-```
-Dashboard → Combos → Create New
-
-Name: premium-coding
-Models:
-  1. cc/claude-opus-4-7 (Subscription primary)
-  2. glm/glm-5.1 (Cheap backup, $0.6/1M)
-  3. minimax/MiniMax-M2.7 (Cheapest fallback, $0.20/1M)
-
-Use in CLI: premium-coding
-
-Monthly cost example (100M tokens):
-  80M via Claude (subscription): $0 extra
-  15M via GLM: $9
-  5M via MiniMax: $1
-  Total: $10 + your subscription
-```
-
-### Example 2: Free-Only (Zero Cost)
-
-```
-Name: free-combo
-Models:
-  1. kr/claude-sonnet-4.5 (Claude 4.5 free unlimited)
-  2. kr/glm-5 (GLM-5 free via Kiro)
-  3. vertex/gemini-3.1-pro-preview ($300 free credits)
-
-Cost: $0 forever (+ 20-40% token savings via RTK)!
-```
-
-</details>
-
-<details>
-<summary><b>🔧 CLI Integration</b></summary>
-
-### Cursor IDE
-
-```
-Settings → Models → Advanced:
-  OpenAI API Base URL: http://localhost:20128/v1
-  OpenAI API Key: [from lazirouter dashboard]
-  Model: cc/claude-opus-4-7
-```
-
-Or use combo: `premium-coding`
+## 数据模型
+
+11 张表，全部业务表都有 `tenant_id` 外键：
+
+| 表 | 用途 | 关键字段 |
+|---|---|---|
+| `tenants` | 租户 | id, name, plan, status |
+| `users` | 用户 | tenant_id, email, password_hash, role |
+| `api_keys` | 客户端 key | tenant_id, key_hash, key_prefix, rate_limit_rpm |
+| `connections` | 上游凭证 | tenant_id, provider, name, auth_type, credentials_encrypted (KMS-envelope), oauth_expires_at |
+| `combos` | fallback 链 | tenant_id, slug, nodes (JSONB) |
+| `aliases` | 模型别名 | tenant_id, alias → {provider, model} |
+| `disabled_models` | 禁用列表 | tenant_id, provider, model |
+| `pricing` | 计价表 | tenant_id (nullable=global), provider, model, *_micros_per_token |
+| `tenant_settings` | k/v 配置 | tenant_id |
+| `usage_events` | 用量事件流 | tenant_id, provider, model, tokens, cost_micros, status, latency_ms |
+| `usage_summaries` | 小时聚合 | (tenant_id, bucket_hour, provider, model) |
+
+> **Note:** `aliases` 和 `disabled_models` 两张表的 schema 已就位但当前代码尚未使用 — 预留给后续 v2(分别用于"用户取的模型短名映射"和"禁用特定模型清单"),与本期 Auto Routing 设计独立。
+
+## 关键能力 - 验证状态
+
+| 能力 | 实现位置 | 验证测试 |
+|---|---|---|
+| **客户端 sk-lr-** → tenant 映射 | `router/middleware/edgeAuth.js` | ✅ 401 测试覆盖 |
+| **每分钟 rate limit** | `router/middleware/rateLimit.js` | ✅ 第 4 个请求 429 |
+| **Combo fallback** | `router/services/combo.js` + `routes/chatCompletions.js` | ✅ flaky→500→mock→200，cooldown 落 Redis |
+| **多账号 round-robin** | `router/services/accountPicker.js` | ✅ A B C A B C；禁用 B 后 A C A C |
+| **自动 cooldown** | `router/services/accountPicker.js` | ✅ 指数 backoff，Redis EX |
+| **OpenAI /v1/chat/completions** | `router/routes/chatCompletions.js` | ✅ 流式 + 非流式 |
+| **Anthropic /v1/messages** | `router/routes/messages.js` + `router/translator/anthropic.js` | ✅ 流式 + 非流式 + x-api-key |
+| **KMS-style 凭证加密** | `shared/crypto.js` (HKDF + AES-256-GCM) | ✅ 跨租户解密失败 |
+| **OAuth 注册流程 (PKCE)** | `admin/routes/oauth.js` | ✅ mock provider 端到端 |
+| **OAuth 自动刷新** | `worker/jobs/tokenRefresher.js` | ✅ access_token 轮换 + 加密重写 |
+| **Usage 小时聚合** | `worker/jobs/usageAggregator.js` | ✅ 6 events → 4 buckets, error_count 正确 |
+| **Per-tenant 隔离** | 全部 SQL 都带 `WHERE tenant_id = $N` | ✅ 跨租户查询不可见 |
+| **Per-tenant 计费** | `router/services/usage.js` + `getPricing()` | ✅ cost_micros = pt × $/tok + ct × $/tok |
+| **Per-tenant 自动模型切换 (model=auto)** | `router/services/scenarioClassifier.js` + `scenarioRouter.js` + `admin/routes/routing.js` | ✅ `scripts/verify-auto-routing.sh` 12 个断言 |
+| **管理 UI** | `admin-ui/` | ✅ HTTP + CORS |
+
+## 客户端接入示例
 
 ### Claude Code
+```
+Endpoint:    http://localhost:30100/v1
+Header:      x-api-key: sk-lr-xxxxxxxx
+Model:       combo:claude-fallback   (or anthropic:claude-3-5-sonnet)
+```
 
-Edit `~/.claude/config.json`:
+### Codex / OpenCode / Cursor / Cline
+```
+Endpoint:    http://localhost:30100/v1
+Auth:        Authorization: Bearer sk-lr-xxxxxxxx
+Model:       combo:smart   (or openai:gpt-4 / glm:glm-4.6 / ...)
+```
 
+### Combo `smart` 示例
 ```json
 {
-  "anthropic_api_base": "http://localhost:20128/v1",
-  "anthropic_api_key": "your-lazirouter-api-key"
+  "slug": "smart",
+  "nodes": [
+    {"provider": "anthropic", "model": "claude-3-5-sonnet-20241022"},
+    {"provider": "openai",    "model": "gpt-4"},
+    {"provider": "glm",       "model": "glm-4.6"}
+  ]
 }
 ```
+路由顺序尝试每个 provider，遇 429/5xx 自动 cooldown + 切换。
 
-### Codex CLI
+## Auto Routing — 一次配置,按场景自动切换模型
 
-```bash
-export OPENAI_BASE_URL="http://localhost:20128"
-export OPENAI_API_KEY="your-lazirouter-api-key"
+当客户端发请求时传 `model="auto"`(或省略),路由层会按请求内容自动分类到 6 个场景之一,然后查该租户预配置的 `场景 → target` 映射。其他显式 model 取值(`combo:slug`、`provider:model`)完全不走分类器。
 
-codex "your prompt"
-```
+### 场景分类(服务端硬编码,优先级首个命中获胜)
 
-### OpenClaw
+| 顺序 | 场景 | 判定 |
+|---|---|---|
+| 1 | `web` | `tools` 数组中 name 匹配 `/search\|web\|browse/i` |
+| 2 | `tool_use` | `tools` 数组非空 |
+| 3 | `vision` | 任意 message content 是 `image` / `image_url` / `image/*` |
+| 4 | `long_context` | 估算 prompt tokens > 64000 (chars/4) |
+| 5 | `think` | `reasoning_effort∈{high,max}` 或 `thinking.enabled=true` |
+| 6 | `default` | 兜底 |
 
-**Option 1 — Dashboard (recommended):**
-
-```
-Dashboard → CLI Tools → OpenClaw → Select Model → Apply
-```
-
-**Option 2 — Manual:** Edit `~/.openclaw/openclaw.json`:
-
-```json
-{
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "lazirouter/kr/claude-sonnet-4.5"
-      }
-    }
-  },
-  "models": {
-    "providers": {
-      "lazirouter": {
-        "baseUrl": "http://127.0.0.1:20128/v1",
-        "apiKey": "sk_lazirouter",
-        "api": "openai-completions",
-        "models": [
-          {
-            "id": "kr/claude-sonnet-4.5",
-            "name": "Claude Sonnet 4.5 (Kiro Free)"
-          }
-        ]
-      }
-    }
-  }
-}
-```
-
-> **Note:** OpenClaw only works with local LaziRouter. Use `127.0.0.1` instead of `localhost` to avoid IPv6 resolution issues.
-
-### Cline / Continue / RooCode
-
-```
-Provider: OpenAI Compatible
-Base URL: http://localhost:20128/v1
-API Key: [from dashboard]
-Model: cc/claude-opus-4-7
-```
-
-</details>
-
-<details>
-<summary><b>🚀 Deployment</b></summary>
-
-### VPS Deployment
+### 配置(Admin UI 或 REST)
 
 ```bash
-# Clone and install
-git clone https://github.com/decolua/lazirouter.git
-cd lazirouter
-npm install
-npm run build
+# 设 default 场景
+curl -X PUT http://localhost:30200/api/routing/default \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"target":"combo:smart"}'
 
-# Configure
-export JWT_SECRET="your-secure-secret-change-this"
-export INITIAL_PASSWORD="your-password"
-export DATA_DIR="/var/lib/lazirouter"
-export PORT="20128"
-export HOSTNAME="0.0.0.0"
-export NODE_ENV="production"
-export NEXT_PUBLIC_BASE_URL="http://localhost:20128"
-export NEXT_PUBLIC_CLOUD_URL="https://lazirouter.com"
-export API_KEY_SECRET="endpoint-proxy-api-key-secret"
-export MACHINE_ID_SALT="endpoint-proxy-salt"
-
-# Start
-npm run start
-
-# Or use PM2
-npm install -g pm2
-pm2 start npm --name lazirouter -- start
-pm2 save
-pm2 startup
+# 设 long_context 场景
+curl -X PUT http://localhost:30200/api/routing/long_context \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"target":"anthropic:claude-3-5-sonnet-20241022"}'
 ```
 
-### Docker
+target 必须是 `combo:<slug>` 或 `<provider>:<model>` 格式。`combo:<slug>` 在 PUT 时会校验该 combo 在本租户存在且 enabled。
 
-Published images (multi-platform `linux/amd64` + `linux/arm64`):
-- Docker Hub: [`decolua/lazirouter`](https://hub.docker.com/r/decolua/lazirouter)
-- GHCR: [`ghcr.io/decolua/lazirouter`](https://github.com/decolua/lazirouter/pkgs/container/lazirouter)
+### 未配置场景的兜底
 
-**Quick start (use published image):**
+- 该 scenario 未配 → 自动用该租户的 `default` 配置
+- `default` 也未配 → 请求返回 400 `Tenant has no default auto-routing target. Configure it in the dashboard.`
 
-```bash
-docker run -d \
-  --name lazirouter \
-  -p 20128:20128 \
-  -v "$HOME/.lazirouter:/app/data" \
-  -e DATA_DIR=/app/data \
-  decolua/lazirouter:latest
+### 审计
+
+`usage_events.routed_model` 列在客户端传 `model=auto` 时记录"实际选中的 target",显式 model 时为 NULL。
+
+## 安全模型
+
+| 资产 | 保护方式 |
+|---|---|
+| 用户密码 | scrypt N=16384 |
+| Dashboard 会话 | HS256 JWT，12h TTL |
+| 客户端 API key | 仅存 sha256，明文只在创建时返回一次 |
+| 上游 OAuth/api_key | KMS envelope encryption（HKDF over `CLOUD_MASTER_KEY` 派生 per-tenant DEK），AES-256-GCM |
+| 租户隔离 | 所有 SQL `WHERE tenant_id` + 解密用 tenant-specific DEK（跨租户解密会 GCM 校验失败） |
+| OAuth state | Redis 单次性 token，10 分钟 TTL，用过即删 |
+| 速率限制 | Redis 固定窗口（per-key + per-tenant plan） |
+
+## 生产化清单（已具备 / 缺失）
+
+✅ 已具备：
+- 多租户数据隔离
+- KMS-style 凭证加密
+- 完整 OAuth 流程（PKCE）
+- 后台 token 刷新
+- 用量记录 + 小时聚合
+- Rate limit + 自动 cooldown
+- Combo fallback 链
+- Anthropic + OpenAI 双协议
+
+🔧 上生产前还需补：
+- 把 `CLOUD_MASTER_KEY` 换成真 AWS/GCP KMS（`shared/crypto.js` 接口已抽象好）
+- 把 `usage_events` 切到 Kafka/SQS + 独立 aggregator（接口契约已就位）
+- Postgres connection pool 调优 + read replica
+- TimescaleDB hypertable 给 `usage_events`（migration 已留 hook 位置）
+- Prometheus / OpenTelemetry 埋点
+- Stripe billing 集成（结构上：从 usage_summaries → invoice）
+- 多区域部署 + 跨区灾备
+- SSO / SAML（admin 端可加）
+- PII 清洗 / prompt 审计（如客户合规要求）
+
+## 目录结构
+
+```
+cloud/
+├── docker-compose.yml             # Postgres + Redis 本地依赖
+├── .env.example                   # 所需环境变量
+├── migrations/                    # SQL 迁移
+│   └── 0001_init.sql
+├── scripts/                       # 一次性 + 测试脚本
+│   ├── migrate.mjs                # 幂等 runner
+│   ├── seed.mjs                   # 1 个 dev tenant
+│   ├── fake-upstream.mjs          # OpenAI 兼容 mock
+│   ├── flaky-upstream.mjs         # 总是 500，用于测 fallback
+│   ├── labeled-upstream.mjs       # 多实例，用于测 round-robin
+│   └── mock-oauth-provider.mjs    # PKCE mock provider
+├── shared/                        # 共享库（db / redis / crypto / logger / errors / config）
+├── router/                        # 客户端入口服务 (30100)
+│   ├── middleware/
+│   │   ├── edgeAuth.js
+│   │   └── rateLimit.js
+│   ├── services/
+│   │   ├── accountPicker.js       # Redis-based round-robin + cooldown
+│   │   ├── combo.js               # combo:<slug> 解析
+│   │   └── usage.js               # usage 事件 + 计费
+│   ├── providers/
+│   │   └── openaiCompatible.js    # undici 流式 + 非流式
+│   ├── translator/
+│   │   └── anthropic.js           # Anthropic ↔ OpenAI 互转
+│   └── routes/
+│       ├── chatCompletions.js
+│       └── messages.js
+├── admin/                         # 管理 REST (30200)
+│   ├── lib/
+│   │   ├── password.js            # scrypt
+│   │   ├── jwt.js                 # HS256
+│   │   ├── http.js                # router helpers
+│   │   └── oauthProviders.js      # OAuth provider registry
+│   ├── middleware/
+│   │   └── sessionAuth.js
+│   └── routes/
+│       ├── auth.js                # signup/login/me
+│       ├── apiKeys.js
+│       ├── connections.js
+│       ├── combos.js
+│       ├── usage.js
+│       └── oauth.js               # /api/oauth/{provider}/start + callback
+├── admin-ui/                      # 静态 SPA (30300)
+│   ├── index.html
+│   ├── app.js                     # React + htm，无 build
+│   ├── styles.css
+│   └── server.mjs
+└── worker/                        # 后台 jobs
+    └── src/
+        ├── index.js
+        └── jobs/
+            ├── usageAggregator.js
+            ├── tokenRefresher.js
+            └── refreshers/
+                └── openaiOAuth.js
 ```
 
-→ Open http://localhost:20128
-
-**Build from source (dev):**
-
-```bash
-git clone https://github.com/decolua/lazirouter.git
-cd lazirouter/app
-docker build -t lazirouter .
-docker run -d --name lazirouter -p 20128:20128 \
-  -v "$HOME/.lazirouter:/app/data" -e DATA_DIR=/app/data lazirouter
-```
-
-**Container defaults:**
-- `PORT=20128`
-- `HOSTNAME=0.0.0.0`
-
-**Useful commands:**
-
-```bash
-docker logs -f lazirouter
-docker restart lazirouter
-docker stop lazirouter && docker rm lazirouter
-docker pull decolua/lazirouter:latest   # update to latest
-```
-
-**Data persistence:** `$HOME/.lazirouter/db/data.sqlite` on host ↔ `/app/data/db/data.sqlite` in container.
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `JWT_SECRET` | Auto-generated (`~/.lazirouter/jwt-secret`) | JWT signing secret for dashboard auth cookie (override to share across instances) |
-| `INITIAL_PASSWORD` | `123456` | First login password when no saved hash exists |
-| `DATA_DIR` | `~/.lazirouter` | Main app data location (SQLite at `$DATA_DIR/db/data.sqlite`) |
-| `PORT` | framework default | Service port (`20128` in examples) |
-| `HOSTNAME` | framework default | Bind host (Docker defaults to `0.0.0.0`) |
-| `NODE_ENV` | runtime default | Set `production` for deploy |
-| `BASE_URL` | `http://localhost:20128` | Server-side internal base URL used by cloud sync jobs |
-| `CLOUD_URL` | `https://lazirouter.com` | Server-side cloud sync endpoint base URL |
-| `NEXT_PUBLIC_BASE_URL` | `http://localhost:3000` | Backward-compatible/public base URL (prefer `BASE_URL` for server runtime) |
-| `NEXT_PUBLIC_CLOUD_URL` | `https://lazirouter.com` | Backward-compatible/public cloud URL (prefer `CLOUD_URL` for server runtime) |
-| `API_KEY_SECRET` | `endpoint-proxy-api-key-secret` | HMAC secret for generated API keys |
-| `MACHINE_ID_SALT` | `endpoint-proxy-salt` | Salt for stable machine ID hashing |
-| `ENABLE_REQUEST_LOGS` | `false` | Enables request/response logs under `logs/` |
-| `AUTH_COOKIE_SECURE` | `false` | Force `Secure` auth cookie (set `true` behind HTTPS reverse proxy) |
-| `REQUIRE_API_KEY` | `false` | Enforce Bearer API key on `/v1/*` routes (recommended for internet-exposed deploys) |
-| `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` | empty | Optional outbound proxy for upstream provider calls |
-
-Notes:
-- Lowercase proxy variables are also supported: `http_proxy`, `https_proxy`, `all_proxy`, `no_proxy`.
-- `.env` is not baked into Docker image (`.dockerignore`); inject runtime config with `--env-file` or `-e`.
-- On Windows, `APPDATA` can be used for local storage path resolution.
-- `INSTANCE_NAME` appears in older docs/env templates, but is currently not used at runtime.
-
-### Runtime Files and Storage
-
-- Main app state: `${DATA_DIR}/db/data.sqlite` (SQLite — providers, combos, aliases, keys, settings, usage history)
-- Auto backups: `${DATA_DIR}/db/backups/`
-- Optional request/translator logs: `<repo>/logs/...` when `ENABLE_REQUEST_LOGS=true`
-- Both `${DATA_DIR}` and `~/.lazirouter` resolve to the same location in a Docker container — the symlink `/root/.lazirouter -> /app/data` is created at build time.
-
-</details>
-
----
-
-## 📊 Available Models
-
-<details>
-<summary><b>View all available models</b></summary>
-
-**Claude Code (`cc/`)** - Pro/Max:
-- `cc/claude-opus-4-7`
-- `cc/claude-opus-4-6`
-- `cc/claude-sonnet-4-6`
-- `cc/claude-sonnet-4-5-20250929`
-- `cc/claude-haiku-4-5-20251001`
-
-**Codex (`cx/`)** - Plus/Pro:
-- `cx/gpt-5.5`
-- `cx/gpt-5.4`
-- `cx/gpt-5.3-codex`
-- `cx/gpt-5.2-codex`
-- `cx/gpt-5.1-codex-max`
-
-**GitHub Copilot (`gh/`)**:
-- `gh/gpt-5.4`
-- `gh/claude-opus-4.7`
-- `gh/claude-sonnet-4.6`
-- `gh/gemini-3.1-pro-preview`
-- `gh/grok-code-fast-1`
-
-**Cursor (`cu/`)** - Subscription:
-- `cu/claude-4.6-opus-max`
-- `cu/claude-4.5-sonnet-thinking`
-- `cu/gpt-5.3-codex`
-- `cu/kimi-k2.5`
-
-**GLM (`glm/`)** - $0.6/1M:
-- `glm/glm-5.1`
-- `glm/glm-5`
-- `glm/glm-4.7`
-
-**MiniMax (`minimax/`)** - $0.2/1M:
-- `minimax/MiniMax-M2.7`
-- `minimax/MiniMax-M2.5`
-
-**Kimi (`kimi/`)** - $9/mo flat:
-- `kimi/kimi-k2.5`
-- `kimi/kimi-k2.5-thinking`
-
-**Kiro (`kr/`)** - FREE unlimited:
-- `kr/claude-sonnet-4.5`
-- `kr/claude-haiku-4.5`
-- `kr/glm-5`
-- `kr/MiniMax-M2.5`
-- `kr/qwen3-coder-next`
-- `kr/deepseek-3.2`
-
-**OpenCode Free (`oc/`)** - FREE no-auth:
-- Auto-fetched from `opencode.ai/zen/v1/models`
-
-**Vertex AI (`vertex/`)** - $300 free credits:
-- `vertex/gemini-3.1-pro-preview`
-- `vertex/gemini-3-flash-preview`
-- `vertex/gemini-2.5-flash`
-- `vertex-partner/glm-5-maas`
-- `vertex-partner/deepseek-v3.2-maas`
-
-</details>
-
----
-
-## 🐛 Troubleshooting
-
-**"Language model did not provide messages"**
-- Provider quota exhausted → Check dashboard quota tracker
-- Solution: Use combo fallback or switch to cheaper tier
-
-**Rate limiting**
-- Subscription quota out → Fallback to GLM/MiniMax
-- Add combo: `cc/claude-opus-4-7 → glm/glm-5.1 → kr/claude-sonnet-4.5`
-
-**OAuth token expired**
-- Auto-refreshed by LaziRouter
-- If issues persist: Dashboard → Provider → Reconnect
-
-**High costs**
-- Enable RTK in Dashboard → Endpoint settings (default ON, saves 20-40% tokens)
-- Check usage stats in Dashboard
-- Switch primary model to GLM/MiniMax
-- Use free tier (Kiro, OpenCode Free, Vertex) for non-critical tasks
-
-**Dashboard opens on wrong port**
-- Set `PORT=20128` and `NEXT_PUBLIC_BASE_URL=http://localhost:20128`
-
-**First login not working**
-- Check `INITIAL_PASSWORD` in `.env`
-- If unset, fallback password is `123456`
-
-**No request logs under `logs/`**
-- Set `ENABLE_REQUEST_LOGS=true`
-
----
-
-## 🛠️ Tech Stack
-
-- **Runtime**: Node.js 20+
-- **Framework**: Next.js 16
-- **UI**: React 19 + Tailwind CSS 4
-- **Database**: SQLite (better-sqlite3 / node:sqlite / sql.js fallback)
-- **Streaming**: Server-Sent Events (SSE)
-- **Auth**: OAuth 2.0 (PKCE) + JWT + API Keys
-
----
-
-## 📝 API Reference
-
-### Chat Completions
-
-```bash
-POST http://localhost:20128/v1/chat/completions
-Authorization: Bearer your-api-key
-Content-Type: application/json
-
-{
-  "model": "cc/claude-opus-4-6",
-  "messages": [
-    {"role": "user", "content": "Write a function to..."}
-  ],
-  "stream": true
-}
-```
-
-### List Models
-
-```bash
-GET http://localhost:20128/v1/models
-Authorization: Bearer your-api-key
-
-→ Returns all models + combos in OpenAI format
-```
-
-## 📧 Support
-
-- **Website**: [lazirouter.com](https://lazirouter.com)
-- **GitHub**: [github.com/decolua/lazirouter](https://github.com/decolua/lazirouter)
-- **Issues**: [github.com/decolua/lazirouter/issues](https://github.com/decolua/lazirouter/issues)
-
----
-
-## 👥 Contributors
-
-Thanks to all contributors who helped make LaziRouter better!
-
-[![Contributors](https://contrib.rocks/image?repo=decolua/lazirouter&max=150&columns=15&anon=1&v=20260309)](https://github.com/decolua/lazirouter/graphs/contributors)
-
----
-
-## 📊 Star Chart
-
-[![Star Chart](https://starchart.cc/decolua/lazirouter.svg?variant=adaptive)](https://starchart.cc/decolua/lazirouter)
-
-
-
-## 🔀 Forks
-
-**[OmniRoute](https://github.com/diegosouzapw/OmniRoute)** — A full-featured TypeScript fork of LaziRouter. Adds 36+ providers, 4-tier auto-fallback, multi-modal APIs (images, embeddings, audio, TTS), circuit breaker, semantic cache, LLM evaluations, and a polished dashboard. 368+ unit tests. Available via npm and Docker.
-
----
-
-## 🙏 Acknowledgments
-
-Built on the shoulders of giants:
-
-- **CLIProxyAPI(https://github.com/router-for-me/CLIProxyAPI)** — original Go implementation that inspired this JavaScript port.
-- **[RTK](https://github.com/rtk-ai/rtk)** ![Stars](https://img.shields.io/github/stars/rtk-ai/rtk?style=flat&color=yellow) — Rust token-saver. LaziRouter ports its compression pipeline to JS → **−20-40% input tokens** on every request.
-- **[Caveman](https://github.com/JuliusBrussee/caveman)** ![Stars](https://img.shields.io/github/stars/JuliusBrussee/caveman?style=flat&color=yellow) by **[@JuliusBrussee](https://github.com/JuliusBrussee)** — viral *"why use many token when few token do trick"*. LaziRouter adapts its prompt → **−65% output tokens**.
-
-Huge thanks to these authors — without their work, LaziRouter's token-saving features wouldn't exist. ⭐ them on GitHub!
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-<div align="center">
-  <sub>Built with ❤️ for developers who code 24/7</sub>
-</div>
+## 与原 lazirouter 的对比
+
+| 维度 | 原 lazirouter (单租户本地) | lazirouter cloud (多租户云端) |
+|---|---|---|
+| 存储 | SQLite (4 driver) | Postgres |
+| 凭证 | 明文 JSON | KMS-envelope 加密 |
+| 鉴权 | 单 dashboard JWT | 用户系统 + API key + tenant 隔离 |
+| 多账号轮询 | 进程内内存 | Redis 共享 |
+| Cooldown | 进程内 | Redis EX (跨实例) |
+| Rate limit | 无 | 每 key + 每 plan |
+| 计费 | 无 | usage_events + 小时聚合 + pricing 表 |
+| Token 刷新 | 请求时懒刷 | 后台 worker + 锁 |
+| MITM | 有（src/mitm/） | 砍掉（无意义） |
+| Tunnel | 有 (Cloudflared/Tailscale) | 砍掉 |
+| 文档站 | 同仓库 gitbook/ | 独立部署 |
+| 部署 | 单进程 | 4 微服务 (router / admin / worker / ui) |
+
+## License
+
+继承上游 lazirouter 项目的开源 license。

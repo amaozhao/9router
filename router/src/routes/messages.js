@@ -26,6 +26,7 @@ import {
   openaiToAnthropicResponse,
   createOpenaiToAnthropicStream,
 } from '../translator/anthropic.js';
+import { readJson, defaultBaseUrl } from '../lib/http.js';
 
 export async function handleMessages(req, res) {
   const startedAt = Date.now();
@@ -206,28 +207,5 @@ async function handleStream({ req, res, upstream, credentials, metadata, baseUrl
     ...usageBase, status: 'ok', latencyMs: Date.now() - startedAt,
     promptTokens, completionTokens, costMicros,
     meta: { transport: '/v1/messages' },
-  });
-}
-
-function defaultBaseUrl(provider) {
-  switch (provider) {
-    case 'openai':    return 'https://api.openai.com';
-    case 'glm':       return 'https://open.bigmodel.cn/api/paas/v4';
-    case 'deepseek':  return 'https://api.deepseek.com';
-    case 'minimax':   return 'https://api.minimaxi.com';
-    case 'anthropic': return 'https://api.anthropic.com';
-    default: return null;
-  }
-}
-
-function readJson(req) {
-  return new Promise((resolve, reject) => {
-    let buf = '';
-    req.on('data', c => { buf += c; if (buf.length > 5 * 1024 * 1024) { req.destroy(); reject(new ValidationError('Body too large')); } });
-    req.on('end', () => {
-      if (!buf) return resolve({});
-      try { resolve(JSON.parse(buf)); } catch { reject(new ValidationError('Invalid JSON body')); }
-    });
-    req.on('error', reject);
   });
 }

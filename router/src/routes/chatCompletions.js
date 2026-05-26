@@ -21,6 +21,7 @@ import { resolveAttempts } from '../services/combo.js';
 import { classifyScenario } from '../services/scenarioClassifier.js';
 import { resolveScenarioTarget } from '../services/scenarioRouter.js';
 import { chatCompletion, streamChatCompletion } from '../providers/openaiCompatible.js';
+import { readJson, defaultBaseUrl } from '../lib/http.js';
 
 export async function handleChatCompletions(req, res) {
   const startedAt = Date.now();
@@ -199,27 +200,3 @@ async function handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, u
   });
 }
 
-function defaultBaseUrl(provider) {
-  switch (provider) {
-    case 'openai':    return 'https://api.openai.com';
-    case 'gemini':    return 'https://generativelanguage.googleapis.com/v1beta/openai';
-    case 'glm':       return 'https://open.bigmodel.cn/api/paas/v4';
-    case 'deepseek':  return 'https://api.deepseek.com';
-    case 'minimax':   return 'https://api.minimaxi.com';
-    case 'anthropic': return 'https://api.anthropic.com';
-    default: return null;
-  }
-}
-
-function readJson(req) {
-  return new Promise((resolve, reject) => {
-    let buf = '';
-    req.on('data', c => { buf += c; if (buf.length > 5 * 1024 * 1024) { req.destroy(); reject(new ValidationError('Body too large')); } });
-    req.on('end', () => {
-      if (!buf) return resolve({});
-      try { resolve(JSON.parse(buf)); }
-      catch (e) { reject(new ValidationError('Invalid JSON body')); }
-    });
-    req.on('error', reject);
-  });
-}

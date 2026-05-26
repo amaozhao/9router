@@ -15,6 +15,7 @@ import { pickAccount, markCooldown } from '../services/accountPicker.js';
 import { recordUsage, getPricing, computeCost } from '../services/usage.js';
 import { resolveAttempts } from '../services/combo.js';
 import { embed } from '../providers/openaiCompatible.js';
+import { readJson, defaultBaseUrl } from '../lib/http.js';
 
 export async function handleEmbeddings(req, res) {
   const startedAt = Date.now();
@@ -99,26 +100,4 @@ export async function handleEmbeddings(req, res) {
   const allNoAccount = errors.length > 0 && errors.every(e => !e.status);
   if (allNoAccount) throw new NoAccountAvailableError({ attempts: errors });
   throw new UpstreamError('All upstream attempts failed', { attempts: errors });
-}
-
-function defaultBaseUrl(provider) {
-  switch (provider) {
-    case 'openai':   return 'https://api.openai.com';
-    case 'gemini':   return 'https://generativelanguage.googleapis.com/v1beta/openai';
-    case 'deepseek': return 'https://api.deepseek.com';
-    case 'glm':      return 'https://open.bigmodel.cn/api/paas/v4';
-    default: return null;
-  }
-}
-
-function readJson(req) {
-  return new Promise((resolve, reject) => {
-    let buf = '';
-    req.on('data', c => { buf += c; if (buf.length > 5 * 1024 * 1024) { req.destroy(); reject(new ValidationError('Body too large')); } });
-    req.on('end', () => {
-      if (!buf) return resolve({});
-      try { resolve(JSON.parse(buf)); } catch { reject(new ValidationError('Invalid JSON body')); }
-    });
-    req.on('error', reject);
-  });
 }

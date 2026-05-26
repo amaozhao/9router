@@ -20,6 +20,7 @@ import { pickAccount, markCooldown } from '../services/accountPicker.js';
 import { recordUsage, getPricing, computeCost } from '../services/usage.js';
 import { resolveAttempts } from '../services/combo.js';
 import { getUpstream, isResponsesNative } from '../providers/index.js';
+import { readJson } from '../lib/http.js';
 
 export async function handleResponses(req, res) {
   const startedAt = Date.now();
@@ -201,17 +202,5 @@ async function handleStream({ req, res, upstream, credentials, metadata, upstrea
     ...usageBase, status: 'ok', latencyMs: Date.now() - startedAt,
     promptTokens, completionTokens, costMicros,
     meta: { transport: '/v1/responses' },
-  });
-}
-
-function readJson(req) {
-  return new Promise((resolve, reject) => {
-    let buf = '';
-    req.on('data', c => { buf += c; if (buf.length > 5 * 1024 * 1024) { req.destroy(); reject(new ValidationError('Body too large')); } });
-    req.on('end', () => {
-      if (!buf) return resolve({});
-      try { resolve(JSON.parse(buf)); } catch { reject(new ValidationError('Invalid JSON body')); }
-    });
-    req.on('error', reject);
   });
 }

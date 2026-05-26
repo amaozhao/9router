@@ -103,13 +103,15 @@ export async function handleMessages(req, res) {
     try {
       if (isStream) {
         await handleStream({
-          req, res, upstream, credentials: account.credentials, baseUrl, upstreamBody,
+          req, res, upstream, credentials: account.credentials, metadata: account.metadata,
+          baseUrl, upstreamBody,
           usesAnthropicShape, requestedModel: anthropicBody.model,
           usageBase, startedAt,
         });
       } else {
         await handleNonStream({
-          res, upstream, credentials: account.credentials, baseUrl, upstreamBody,
+          res, upstream, credentials: account.credentials, metadata: account.metadata,
+          baseUrl, upstreamBody,
           usesAnthropicShape, requestedModel: anthropicBody.model,
           usageBase, startedAt,
         });
@@ -137,8 +139,8 @@ export async function handleMessages(req, res) {
   throw new UpstreamError('All upstream attempts failed', { attempts: errors });
 }
 
-async function handleNonStream({ res, upstream, credentials, baseUrl, upstreamBody, usesAnthropicShape, requestedModel, usageBase, startedAt }) {
-  const result = await upstream.chat({ credentials, baseUrl, body: upstreamBody });
+async function handleNonStream({ res, upstream, credentials, metadata, baseUrl, upstreamBody, usesAnthropicShape, requestedModel, usageBase, startedAt }) {
+  const result = await upstream.chat({ credentials, metadata, baseUrl, body: upstreamBody });
   const anthropicResp = usesAnthropicShape ? result : openaiToAnthropicResponse(result, requestedModel);
 
   const usage = result.usage || {};
@@ -157,7 +159,7 @@ async function handleNonStream({ res, upstream, credentials, baseUrl, upstreamBo
   });
 }
 
-async function handleStream({ req, res, upstream, credentials, baseUrl, upstreamBody, usesAnthropicShape, requestedModel, usageBase, startedAt }) {
+async function handleStream({ req, res, upstream, credentials, metadata, baseUrl, upstreamBody, usesAnthropicShape, requestedModel, usageBase, startedAt }) {
   const ac = new AbortController();
   req.on('close', () => ac.abort());
 
@@ -166,7 +168,7 @@ async function handleStream({ req, res, upstream, credentials, baseUrl, upstream
   let completionTokens = 0;
   const xlate = usesAnthropicShape ? null : createOpenaiToAnthropicStream(requestedModel);
 
-  for await (const frame of upstream.stream({ credentials, baseUrl, body: upstreamBody, signal: ac.signal })) {
+  for await (const frame of upstream.stream({ credentials, metadata, baseUrl, body: upstreamBody, signal: ac.signal })) {
     if (!headersSent) {
       res.writeHead(200, {
         'content-type': 'text/event-stream',

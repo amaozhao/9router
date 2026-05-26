@@ -15,11 +15,11 @@ export function getUpstream(provider) {
     case 'claude':
       return {
         kind: 'anthropic',
-        async chat({ credentials, body, signal }) {
-          return claudeChat({ credentials, body, signal });
+        async chat({ credentials, metadata, body, signal }) {
+          return claudeChat({ credentials, metadata, body, signal });
         },
-        async *stream({ credentials, body, signal }) {
-          for await (const f of claudeStream({ credentials, body, signal })) yield f;
+        async *stream({ credentials, metadata, body, signal }) {
+          for await (const f of claudeStream({ credentials, metadata, body, signal })) yield f;
         },
       };
     // Everything else speaks OpenAI Chat Completions; base_url + api_key on

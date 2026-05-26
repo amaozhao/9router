@@ -1,9 +1,11 @@
 // POST /v1/messages — Anthropic-compatible entry point.
 // Reuses the entire chat-completions pipeline (auth, rate limit, combo,
-// account picking, cooldown, usage) — only the body translation differs.
-//
-// If the resolved provider is 'anthropic' we pass through. Otherwise we
-// translate Anthropic→OpenAI on the way in and OpenAI→Anthropic on the way out.
+// account picking, cooldown, usage). The actual upstream call is selected
+// by provider:
+//   * provider === 'claude'   → claude.ai subscription executor (Anthropic
+//     native passthrough with spoof headers).
+//   * everything else         → OpenAI-compatible client; the Anthropic body
+//     is translated to OpenAI and the response back to Anthropic.
 
 import crypto from 'node:crypto';
 import {
@@ -17,7 +19,7 @@ import { recordUsage, getPricing, computeCost } from '../services/usage.js';
 import { resolveAttempts } from '../services/combo.js';
 import { classifyScenario } from '../services/scenarioClassifier.js';
 import { resolveScenarioTarget } from '../services/scenarioRouter.js';
-import { chatCompletion, streamChatCompletion } from '../providers/openaiCompatible.js';
+import { getUpstream, isAnthropicNative } from '../providers/index.js';
 import {
   anthropicToOpenaiRequest,
   openaiToAnthropicResponse,
@@ -68,13 +70,21 @@ export async function handleMessages(req, res) {
       throw e;
     }
 
-    const baseUrl = account.metadata.base_url || defaultBaseUrl(attempt.provider);
-    if (!baseUrl) { errors.push({ step: attempt.step, reason: `no base_url for ${attempt.provider}` }); continue; }
-    const upstreamApiKey = account.credentials.api_key;
-    if (!upstreamApiKey) { errors.push({ step: attempt.step, reason: 'missing api_key' }); continue; }
+    const upstream = getUpstream(attempt.provider);
+    const usesAnthropicShape = isAnthropicNative(attempt.provider);
 
-    // Translate request unless the provider is native Anthropic
-    const usesAnthropicShape = attempt.provider === 'anthropic';
+    // For OpenAI-compat path, require base_url + api_key credentials.
+    // For Anthropic-native (claude) path, require access_token from OAuth.
+    let baseUrl = null;
+    if (upstream.kind === 'openai') {
+      baseUrl = account.metadata.base_url || defaultBaseUrl(attempt.provider);
+      if (!baseUrl) { errors.push({ step: attempt.step, reason: `no base_url for ${attempt.provider}` }); continue; }
+      if (!account.credentials.api_key) { errors.push({ step: attempt.step, reason: 'missing api_key' }); continue; }
+    } else if (!account.credentials.access_token) {
+      errors.push({ step: attempt.step, reason: 'missing OAuth access_token' });
+      continue;
+    }
+
     const upstreamBody = usesAnthropicShape
       ? { ...anthropicBody, model: attempt.upstreamModel }
       : { ...anthropicToOpenaiRequest(anthropicBody), model: attempt.upstreamModel };
@@ -93,13 +103,13 @@ export async function handleMessages(req, res) {
     try {
       if (isStream) {
         await handleStream({
-          req, res, baseUrl, upstreamApiKey, upstreamBody,
+          req, res, upstream, credentials: account.credentials, baseUrl, upstreamBody,
           usesAnthropicShape, requestedModel: anthropicBody.model,
           usageBase, startedAt,
         });
       } else {
         await handleNonStream({
-          res, baseUrl, upstreamApiKey, upstreamBody,
+          res, upstream, credentials: account.credentials, baseUrl, upstreamBody,
           usesAnthropicShape, requestedModel: anthropicBody.model,
           usageBase, startedAt,
         });
@@ -127,8 +137,8 @@ export async function handleMessages(req, res) {
   throw new UpstreamError('All upstream attempts failed', { attempts: errors });
 }
 
-async function handleNonStream({ res, baseUrl, upstreamApiKey, upstreamBody, usesAnthropicShape, requestedModel, usageBase, startedAt }) {
-  const result = await chatCompletion({ baseUrl, apiKey: upstreamApiKey, body: upstreamBody });
+async function handleNonStream({ res, upstream, credentials, baseUrl, upstreamBody, usesAnthropicShape, requestedModel, usageBase, startedAt }) {
+  const result = await upstream.chat({ credentials, baseUrl, body: upstreamBody });
   const anthropicResp = usesAnthropicShape ? result : openaiToAnthropicResponse(result, requestedModel);
 
   const usage = result.usage || {};
@@ -147,7 +157,7 @@ async function handleNonStream({ res, baseUrl, upstreamApiKey, upstreamBody, use
   });
 }
 
-async function handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, usesAnthropicShape, requestedModel, usageBase, startedAt }) {
+async function handleStream({ req, res, upstream, credentials, baseUrl, upstreamBody, usesAnthropicShape, requestedModel, usageBase, startedAt }) {
   const ac = new AbortController();
   req.on('close', () => ac.abort());
 
@@ -156,7 +166,7 @@ async function handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, u
   let completionTokens = 0;
   const xlate = usesAnthropicShape ? null : createOpenaiToAnthropicStream(requestedModel);
 
-  for await (const frame of streamChatCompletion({ baseUrl, apiKey: upstreamApiKey, body: upstreamBody, signal: ac.signal })) {
+  for await (const frame of upstream.stream({ credentials, baseUrl, body: upstreamBody, signal: ac.signal })) {
     if (!headersSent) {
       res.writeHead(200, {
         'content-type': 'text/event-stream',
@@ -170,9 +180,13 @@ async function handleStream({ req, res, baseUrl, upstreamApiKey, upstreamBody, u
     } else {
       res.write(frame);
     }
-    // Sniff usage even for passthrough
-    const m = /"usage"\s*:\s*\{[^}]*"(?:prompt_tokens|input_tokens)"\s*:\s*(\d+)[^}]*"(?:completion_tokens|output_tokens)"\s*:\s*(\d+)/.exec(frame);
-    if (m) { promptTokens = Number(m[1]); completionTokens = Number(m[2]); }
+    // Sniff usage even for passthrough. Anthropic emits both input_tokens
+    // and output_tokens; they can appear in either order across frames so
+    // capture them independently and keep the latest seen.
+    const pin  = /"(?:prompt_tokens|input_tokens)"\s*:\s*(\d+)/.exec(frame);
+    const pout = /"(?:completion_tokens|output_tokens)"\s*:\s*(\d+)/.exec(frame);
+    if (pin)  promptTokens = Number(pin[1]);
+    if (pout) completionTokens = Number(pout[1]);
   }
   if (xlate) {
     for (const out of xlate.flush()) res.write(out);

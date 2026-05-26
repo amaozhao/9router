@@ -75,7 +75,7 @@ export async function oauthCallback(req, res) {
   let tokens;
   try {
     tokens = await exchangeCode(provider, {
-      code, codeVerifier: flow.verifier, redirectUri: flow.redirectUri,
+      code, codeVerifier: flow.verifier, redirectUri: flow.redirectUri, state,
     });
   } catch (e) {
     if (e instanceof UpstreamError) return renderResult(res, 502, { error: 'exchange_failed', detail: e.message });
@@ -128,6 +128,89 @@ export async function oauthCallback(req, res) {
     name: flow.connectionName,
     expires_at: oauthExpiresAt,
   });
+}
+
+/**
+ * POST /api/oauth/{provider}/import — bring-your-own-token for subscription
+ * providers (claude, codex, etc.). Lets a tenant paste an access_token they
+ * already obtained out-of-band (e.g. via their local CLI install) directly
+ * into a connection, bypassing the interactive OAuth dance.
+ *
+ * Body:
+ *   {
+ *     connectionName: string,
+ *     accessToken:    string,
+ *     refreshToken?:  string,
+ *     expiresAt?:     ISO string | epoch ms | epoch seconds,
+ *     scopes?:        string[]
+ *   }
+ */
+export async function importOauth(req, res, { params }) {
+  const session = requireSession(req);
+  requireRole(session, 'owner', 'admin');
+  const providerName = params.provider;
+  const body = await readJson(req);
+  const accessToken = String(body.accessToken || '').trim();
+  if (!accessToken) throw new ValidationError('Missing accessToken');
+  const connectionName = (body.connectionName || `${providerName}-import`).trim();
+
+  // We don't strictly need a configured provider entry to import — but if
+  // there is one, use its token_endpoint so the refresher can rotate later.
+  let tokenEndpoint = null, clientId = null;
+  try {
+    const provider = getProvider(providerName);
+    tokenEndpoint = provider.tokenEndpoint;
+    clientId = provider.clientId;
+  } catch { /* unknown provider is fine */ }
+
+  // Normalise expiresAt
+  let oauthExpiresAt = null;
+  if (body.expiresAt != null) {
+    if (typeof body.expiresAt === 'number') {
+      const ms = body.expiresAt > 1e12 ? body.expiresAt : body.expiresAt * 1000;
+      oauthExpiresAt = new Date(ms).toISOString();
+    } else {
+      const d = new Date(body.expiresAt);
+      if (Number.isNaN(d.getTime())) throw new ValidationError('Invalid expiresAt');
+      oauthExpiresAt = d.toISOString();
+    }
+  }
+
+  const credentials = {
+    access_token: accessToken,
+    refresh_token: body.refreshToken || null,
+    token_endpoint: tokenEndpoint,
+    client_id: clientId,
+    scope: Array.isArray(body.scopes) ? body.scopes.join(' ') : (body.scope || null),
+    imported_at: new Date().toISOString(),
+  };
+  const blob = encryptForTenant(session.tenantId, credentials);
+
+  await query(`
+    INSERT INTO connections
+      (tenant_id, provider, name, auth_type, credentials_encrypted, oauth_expires_at, metadata, enabled, weight)
+    VALUES ($1, $2, $3, 'oauth', $4, $5, $6, TRUE, 1)
+    ON CONFLICT (tenant_id, provider, name) DO UPDATE SET
+      credentials_encrypted = EXCLUDED.credentials_encrypted,
+      oauth_expires_at      = EXCLUDED.oauth_expires_at,
+      auth_type             = 'oauth',
+      enabled               = TRUE,
+      updated_at            = now()
+  `, [
+    session.tenantId, providerName, connectionName,
+    blob, oauthExpiresAt, JSON.stringify({ via: 'import' }),
+  ]);
+
+  // Hot-reload accountPicker view of this tenant's connections
+  const { getRedis: _gr } = await import('@9router-cloud/shared');
+  await _gr().del(`conn_cache:${session.tenantId}:${providerName}`);
+
+  ok(res, {
+    ok: true,
+    provider: providerName,
+    name: connectionName,
+    expires_at: oauthExpiresAt,
+  }, 201);
 }
 
 function defaultRedirectUri(req) {

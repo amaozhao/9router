@@ -40,8 +40,17 @@ assert_contains() {
 # ── reset
 docker exec 9router-cloud-redis redis-cli FLUSHALL > /dev/null
 docker exec 9router-cloud-pg psql -U router -d router -c \
-  "TRUNCATE tenants, users, api_keys, connections, combos, pricing, usage_events, usage_summaries RESTART IDENTITY CASCADE" \
+  "TRUNCATE tenants, users, api_keys, connections, combos, pricing, usage_events, usage_summaries, tenant_routing RESTART IDENTITY CASCADE" \
   > /dev/null 2>&1
+
+# ── free any port we plan to bind so our processes win (otherwise an existing
+#    'live' server on 30100/30200/30300 silently absorbs every request and the
+#    OAuth-mock assertions fail because they hit an admin without MOCK_OAUTH_CLIENT_ID)
+for port in 30100 30200 30300 31999 31998 31995; do
+  PIDS=$(lsof -ti:$port 2>/dev/null)
+  [ -n "$PIDS" ] && kill $PIDS 2>/dev/null
+done
+sleep 0.4
 
 # ── start everything
 node scripts/fake-upstream.mjs        > /tmp/v-fake.log  2>&1 &  P_FAKE=$!

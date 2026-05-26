@@ -9,6 +9,7 @@ import { logger, closeDb, closeRedis } from '@9router-cloud/shared';
 import { scheduleAggregator } from './jobs/usageAggregator.js';
 import { scheduleRefresher, registerRefresher } from './jobs/tokenRefresher.js';
 import { refreshOpenAiOAuth } from './jobs/refreshers/openaiOAuth.js';
+import { refreshClaudeOAuth } from './jobs/refreshers/claudeOAuth.js';
 
 const log = logger.child({ svc: 'worker' });
 
@@ -16,6 +17,7 @@ const log = logger.child({ svc: 'worker' });
 registerRefresher('openai',   refreshOpenAiOAuth);
 registerRefresher('codex',    refreshOpenAiOAuth);
 registerRefresher('cursor',   refreshOpenAiOAuth);
+registerRefresher('claude',   refreshClaudeOAuth);
 
 log.info('starting worker');
 const handles = [];

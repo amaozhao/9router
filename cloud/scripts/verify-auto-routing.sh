@@ -9,10 +9,22 @@
 set -u
 cd "$(dirname "$0")/.."
 
-export DATABASE_URL='postgres://router:router_dev_pw@localhost:5432/router'
-export REDIS_URL='redis://localhost:6379/0'
+export DATABASE_URL="${DATABASE_URL:-postgres://router:router_dev_pw@localhost:55432/router}"
+export REDIS_URL="${REDIS_URL:-redis://localhost:56379/0}"
 export CLOUD_MASTER_KEY="${CLOUD_MASTER_KEY:-+rB3s6hXL3gKZmhnywQQeMNUwiWSLkIo7wJRWa3BrY4=}"
 export JWT_SECRET='verify-auto-routing'
+
+# Container names (overridable for non-default deployments)
+PG_CONTAINER="${PG_CONTAINER:-9router-cloud-pg}"
+REDIS_CONTAINER="${REDIS_CONTAINER:-9router-cloud-redis}"
+
+# Free our ports so any existing process doesn't intercept (otherwise admin/
+# router from a separate 'live' session would receive these test requests).
+for port in 30100 30200 40991; do
+  PIDS=$(lsof -ti:$port 2>/dev/null)
+  [ -n "$PIDS" ] && kill $PIDS 2>/dev/null
+done
+sleep 0.4
 
 PASS=0; FAIL=0; RESULTS=()
 
@@ -34,11 +46,12 @@ cleanup() {
 trap cleanup EXIT
 
 # ── Reset: drop any scratch tenants from prior runs.
-docker exec fastworkroom-postgres psql -U router -d router -q \
+docker exec "$PG_CONTAINER" psql -U router -d router -q \
   -c "DELETE FROM tenants WHERE name LIKE 'verify-routing-%'" >/dev/null 2>&1 || true
 
 # Flush routing cache so stale keys don't bleed over.
-docker exec 9router-redis redis-cli KEYS 'routing:*' | xargs -r docker exec -i 9router-redis redis-cli DEL >/dev/null 2>&1 || true
+docker exec "$REDIS_CONTAINER" redis-cli KEYS 'routing:*' \
+  | xargs -r docker exec -i "$REDIS_CONTAINER" redis-cli DEL >/dev/null 2>&1 || true
 
 # ── Boot processes
 FAKE_UPSTREAM_PORT=40991 node scripts/fake-upstream.mjs > /tmp/vr-fake.log 2>&1 & P_FAKE=$!
@@ -153,11 +166,13 @@ sleep 1
 # The router passes this JSON through unchanged, so we can read result.model.
 hit() {
   local sk="$1" body="$2"
-  RESP=$(curl -s -X POST http://localhost:30100/v1/chat/completions \
+  # Pipe body via stdin (`--data-binary @-`) so payloads larger than ARG_MAX
+  # (long_context assertion uses 260K chars) don't blow up the curl argv.
+  RESP=$(printf '%s' "$body" | curl -s -X POST http://localhost:30100/v1/chat/completions \
     -H "authorization: Bearer $sk" \
     -H 'content-type: application/json' \
-    -d "$body")
-  python3 -c "import sys,json; d=json.loads(sys.argv[1]); print(d.get('model',''))" "$RESP" 2>/dev/null
+    --data-binary @-)
+  printf '%s' "$RESP" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('model',''))" 2>/dev/null
 }
 
 # ────────────────────────────────────────────────────────────────
@@ -228,7 +243,7 @@ assert_eq "tenantA / explicit model bypasses classifier" "explicit-model" "$M"
 # (routed_model='openai:fake-default'). We look for the oldest auto
 # row for tenant A (assertion 1 was the first hit).
 # ────────────────────────────────────────────────────────────────
-ROUTED_AUTO=$(docker exec fastworkroom-postgres psql -U router -d router -tAc \
+ROUTED_AUTO=$(docker exec "$PG_CONTAINER" psql -U router -d router -tAc \
   "SELECT routed_model FROM usage_events WHERE model='auto' AND tenant_id=${TENANT_A_ID} ORDER BY id ASC LIMIT 1" 2>/dev/null | tr -d '[:space:]')
 assert_eq "usage_events.routed_model set when model=auto" "openai:fake-default" "$ROUTED_AUTO"
 
@@ -237,7 +252,7 @@ assert_eq "usage_events.routed_model set when model=auto" "openai:fake-default" 
 # an explicit non-auto model (classifier was bypassed). Assertion 9
 # above hit the router with model='openai:explicit-model'.
 # ────────────────────────────────────────────────────────────────
-ROUTED_EXPLICIT=$(docker exec fastworkroom-postgres psql -U router -d router -tAc \
+ROUTED_EXPLICIT=$(docker exec "$PG_CONTAINER" psql -U router -d router -tAc \
   "SELECT COALESCE(routed_model, 'NULL') FROM usage_events WHERE model='openai:explicit-model' AND tenant_id=${TENANT_A_ID} ORDER BY id DESC LIMIT 1" 2>/dev/null | tr -d '[:space:]')
 assert_eq "usage_events.routed_model NULL when client sent explicit model" "NULL" "$ROUTED_EXPLICIT"
 

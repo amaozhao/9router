@@ -21,7 +21,7 @@ import { listConnections, createConnection, updateConnection, deleteConnection }
 import { listCombos, createCombo, updateCombo, deleteCombo } from './routes/combos.js';
 import { listRouting, putRouting, deleteRouting } from './routes/routing.js';
 import { summary as usageSummary, recent as usageRecent } from './routes/usage.js';
-import { listOauthProviders, startOauth, oauthCallback } from './routes/oauth.js';
+import { listOauthProviders, startOauth, oauthCallback, importOauth } from './routes/oauth.js';
 
 const log = logger.child({ svc: 'admin' });
 
@@ -53,6 +53,7 @@ const routes = [
 
   { method: 'GET',    pattern: '/api/oauth/providers',          handler: listOauthProviders },
   { method: 'POST',   pattern: '/api/oauth/:provider/start',    handler: startOauth },
+  { method: 'POST',   pattern: '/api/oauth/:provider/import',   handler: importOauth },
   { method: 'GET',    pattern: '/api/oauth/callback',           handler: oauthCallback },
 ];
 

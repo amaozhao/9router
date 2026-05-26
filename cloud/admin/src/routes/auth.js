@@ -7,7 +7,7 @@
 import {
   query, tx, ValidationError, AuthError, isSuperAdminEmail,
   generateApiKey, sha256Hex,
-} from '@9router-cloud/shared';
+} from '@lazirouter-cloud/shared';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { signJwt } from '../lib/jwt.js';
 import { readJson, ok, requireField } from '../lib/http.js';

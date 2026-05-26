@@ -6,7 +6,7 @@
 
 **Architecture:** Pure-function classifier reads request body (no I/O). Resolver reads per-tenant `tenant_routing` table via Redis-cached map (TTL 30s, invalidated on PUT/DELETE). `chatCompletions.js` and `messages.js` insert classify+resolve only when `model in ('', 'auto')`; explicit `combo:slug` or `provider:model` bypasses the classifier and reaches the existing `resolveAttempts()` unchanged. `usage_events` gains a `routed_model` column so audit can distinguish "client sent 'auto'" from "actually hit anthropic:claude-sonnet".
 
-**Tech Stack:** Node.js ESM, Postgres via `pg` through `@9router-cloud/shared` (`query`, `tx`), Redis via ioredis through `getRedis()`, `node --test` for unit tests, bash assertion scripts in `cloud/scripts/` for end-to-end verification.
+**Tech Stack:** Node.js ESM, Postgres via `pg` through `@lazirouter-cloud/shared` (`query`, `tx`), Redis via ioredis through `getRedis()`, `node --test` for unit tests, bash assertion scripts in `cloud/scripts/` for end-to-end verification.
 
 **Spec:** `cloud/docs/specs/2026-05-25-per-tenant-auto-model-switching-design.md`
 
@@ -291,7 +291,7 @@ Create `cloud/router/src/services/scenarioRouter.js`:
 // Reads from tenant_routing table; caches the full per-tenant map in Redis
 // for 30s. PUT/DELETE in the admin route must call invalidateTenantRouting().
 
-import { query, getRedis, ValidationError, logger } from '@9router-cloud/shared';
+import { query, getRedis, ValidationError, logger } from '@lazirouter-cloud/shared';
 
 const CACHE_TTL_SECONDS = 30;
 
@@ -464,7 +464,7 @@ Also add `logger` to the shared import on line 9-12 if not already present (it i
 import {
   logger, ValidationError, UpstreamError, AuthError,
   NoAccountAvailableError, AppError,
-} from '@9router-cloud/shared';
+} from '@lazirouter-cloud/shared';
 ```
 
 - [ ] **Step 2: Insert classifier in messages.js**
@@ -589,7 +589,7 @@ Create `cloud/admin/src/routes/routing.js`:
 // PUT    /api/routing/:scenario     → upsert; body: { target: string }
 // DELETE /api/routing/:scenario     → delete; default scenario cannot be deleted
 
-import { query, NotFoundError, ValidationError, getRedis } from '@9router-cloud/shared';
+import { query, NotFoundError, ValidationError, getRedis } from '@lazirouter-cloud/shared';
 import { readJson, ok, noContent } from '../lib/http.js';
 import { requireSession, requireRole } from '../middleware/sessionAuth.js';
 

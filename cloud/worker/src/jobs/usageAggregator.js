@@ -6,7 +6,7 @@
 //   We re-aggregate the CURRENT hour every run (cheap) so the dashboard sees
 //   near-realtime numbers without coupling to the write path.
 
-import { query, logger } from '@9router-cloud/shared';
+import { query, logger } from '@lazirouter-cloud/shared';
 
 const log = logger.child({ job: 'usage-aggregator' });
 

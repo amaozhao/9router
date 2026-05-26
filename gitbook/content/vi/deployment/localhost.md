@@ -1,15 +1,15 @@
 # 🏠 Triển khai Localhost
 
-Chạy 9Router trên máy cá nhân để phát triển và dùng cá nhân.
+Chạy LaziRouter trên máy cá nhân để phát triển và dùng cá nhân.
 
 ---
 
 ## 📦 Cài đặt
 
-Cài đặt 9Router toàn cục qua npm:
+Cài đặt LaziRouter toàn cục qua npm:
 
 ```bash
-npm install -g 9router
+npm install -g lazirouter
 ```
 
 **Yêu cầu:**
@@ -20,10 +20,10 @@ npm install -g 9router
 
 ## 🚀 Khởi động Server
 
-Khởi động 9Router với một lệnh duy nhất:
+Khởi động LaziRouter với một lệnh duy nhất:
 
 ```bash
-9router
+lazirouter
 ```
 
 Dashboard sẽ tự động mở trong trình duyệt tại `http://localhost:3000`
@@ -31,7 +31,7 @@ Dashboard sẽ tự động mở trong trình duyệt tại `http://localhost:30
 **Cấu hình mặc định:**
 - **Dashboard**: `http://localhost:3000`
 - **API Endpoint**: `http://localhost:20128/v1`
-- **Data Directory**: `~/.9router`
+- **Data Directory**: `~/.lazirouter`
 
 ---
 
@@ -42,7 +42,7 @@ Dashboard sẽ tự động mở trong trình duyệt tại `http://localhost:30
 Đặt thư mục data tùy chỉnh qua biến môi trường:
 
 ```bash
-DATA_DIR=/path/to/data 9router
+DATA_DIR=/path/to/data lazirouter
 ```
 
 ### Custom Port
@@ -53,10 +53,10 @@ Port API (20128) và port dashboard (3000) được cấu hình trong applicatio
 
 ## 🛑 Dừng Server
 
-Nhấn `Ctrl+C` trong terminal đang chạy 9Router.
+Nhấn `Ctrl+C` trong terminal đang chạy LaziRouter.
 
 ```bash
-# In the terminal running 9router
+# In the terminal running lazirouter
 ^C  # Press Ctrl+C
 ```
 
@@ -69,25 +69,25 @@ Server sẽ shutdown an toàn và lưu mọi dữ liệu.
 Chỉ cần chạy lệnh start lại:
 
 ```bash
-9router
+lazirouter
 ```
 
 Mọi cấu hình, API keys và combos được giữ lại trong thư mục data.
 
 ---
 
-## 📊 Cập nhật 9Router
+## 📊 Cập nhật LaziRouter
 
 Cập nhật phiên bản mới nhất:
 
 ```bash
-npm update -g 9router
+npm update -g lazirouter
 ```
 
 Kiểm tra version hiện tại:
 
 ```bash
-npm list -g 9router
+npm list -g lazirouter
 ```
 
 ---
@@ -113,7 +113,7 @@ Nếu gặp lỗi permission khi cài đặt:
 
 ```bash
 # Use sudo (not recommended)
-sudo npm install -g 9router
+sudo npm install -g lazirouter
 
 # Or fix npm permissions (recommended)
 mkdir ~/.npm-global
@@ -128,10 +128,10 @@ Nếu thư mục data không truy cập được:
 
 ```bash
 # Check permissions
-ls -la ~/.9router
+ls -la ~/.lazirouter
 
 # Fix permissions
-chmod 755 ~/.9router
+chmod 755 ~/.lazirouter
 ```
 
 ---
@@ -139,7 +139,7 @@ chmod 755 ~/.9router
 ## 📁 Cấu trúc Data Directory
 
 ```
-~/.9router/
+~/.lazirouter/
 ├── db.json           # Main database (providers, combos, settings)
 ├── logs/             # Application logs
 └── cache/            # Temporary cache files
@@ -149,10 +149,10 @@ chmod 755 ~/.9router
 
 ```bash
 # Backup
-cp -r ~/.9router ~/.9router.backup
+cp -r ~/.lazirouter ~/.lazirouter.backup
 
 # Restore
-cp -r ~/.9router.backup ~/.9router
+cp -r ~/.lazirouter.backup ~/.lazirouter
 ```
 
 ---

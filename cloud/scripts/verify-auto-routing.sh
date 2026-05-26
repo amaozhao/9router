@@ -4,7 +4,7 @@
 # different routing per tenant, asserts each scenario lands on the right
 # upstream and cross-tenant isolation holds.
 #
-# Expects Postgres + Redis already running (docker container fastworkroom-postgres + 9router-redis).
+# Expects Postgres + Redis already running (docker container fastworkroom-postgres + lazirouter-redis).
 
 set -u
 cd "$(dirname "$0")/.."
@@ -18,8 +18,8 @@ export JWT_SECRET='verify-auto-routing'
 export SUPER_ADMIN_EMAILS='verify-routing-admin@x.io'
 
 # Container names (overridable for non-default deployments)
-PG_CONTAINER="${PG_CONTAINER:-9router-cloud-pg}"
-REDIS_CONTAINER="${REDIS_CONTAINER:-9router-cloud-redis}"
+PG_CONTAINER="${PG_CONTAINER:-lazirouter-cloud-pg}"
+REDIS_CONTAINER="${REDIS_CONTAINER:-lazirouter-cloud-redis}"
 
 # Free our ports so any existing process doesn't intercept (otherwise admin/
 # router from a separate 'live' session would receive these test requests).

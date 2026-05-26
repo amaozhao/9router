@@ -13,7 +13,7 @@
 //   GET   /api/usage/recent
 
 import http from 'node:http';
-import { config, logger, AppError, closeRedis, closeDb } from '@9router-cloud/shared';
+import { config, logger, AppError, closeRedis, closeDb } from '@lazirouter-cloud/shared';
 import { matchRoute } from './lib/http.js';
 import { signup, login, me } from './routes/auth.js';
 import { listKeys, createKey, revokeKey } from './routes/apiKeys.js';

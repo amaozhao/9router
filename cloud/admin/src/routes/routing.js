@@ -5,7 +5,7 @@
 // PUT    /api/routing/:scenario     → upsert; body: { target: string }
 // DELETE /api/routing/:scenario     → delete; default scenario cannot be deleted
 
-import { query, NotFoundError, ValidationError, invalidateTenantRouting } from '@9router-cloud/shared';
+import { query, NotFoundError, ValidationError, invalidateTenantRouting } from '@lazirouter-cloud/shared';
 import { readJson, ok, noContent } from '../lib/http.js';
 import { requireSession, requireRole } from '../middleware/sessionAuth.js';
 

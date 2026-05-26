@@ -1,9 +1,9 @@
-// Edge auth: extract sk-9r-xxx → tenant context.
+// Edge auth: extract sk-lr-xxx → tenant context.
 // Fast path: Redis cache (apikey:<hash>) → 1ms
 // Slow path: Postgres query, then populate cache
 // Failure mode: 401
 
-import { query, getRedis, sha256Hex, AuthError, ForbiddenError, config, logger } from '@9router-cloud/shared';
+import { query, getRedis, sha256Hex, AuthError, ForbiddenError, config, logger } from '@lazirouter-cloud/shared';
 
 const CACHE_TTL = config.apiKeyCacheTtlSec;
 
@@ -12,7 +12,7 @@ const CACHE_TTL = config.apiKeyCacheTtlSec;
  * Returns { tenantId, apiKeyId, scopes, plan, status } or throws AuthError.
  */
 export async function resolveApiKey(apiKey) {
-  if (!apiKey || typeof apiKey !== 'string' || !apiKey.startsWith('sk-9r-')) {
+  if (!apiKey || typeof apiKey !== 'string' || !apiKey.startsWith('sk-lr-')) {
     throw new AuthError('Invalid API key format');
   }
   const hash = sha256Hex(apiKey);

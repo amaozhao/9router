@@ -5,7 +5,7 @@
 //   - tokenRefresher (OAuth refresh for connections with auth_type='oauth')
 //   - billingExporter (daily/monthly Stripe push)
 
-import { logger, closeDb, closeRedis } from '@9router-cloud/shared';
+import { logger, closeDb, closeRedis } from '@lazirouter-cloud/shared';
 import { scheduleAggregator } from './jobs/usageAggregator.js';
 import { scheduleRefresher, registerRefresher } from './jobs/tokenRefresher.js';
 import { refreshOpenAiOAuth } from './jobs/refreshers/openaiOAuth.js';

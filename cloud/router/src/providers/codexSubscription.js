@@ -6,7 +6,7 @@
 
 import crypto from 'node:crypto';
 import { ProxyAgent } from 'undici';
-import { UpstreamError } from '@9router-cloud/shared';
+import { UpstreamError } from '@lazirouter-cloud/shared';
 
 const BASE_URL = 'https://chatgpt.com/backend-api/codex/responses';
 

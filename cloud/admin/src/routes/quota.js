@@ -4,7 +4,7 @@
 import {
   query, ValidationError, NotFoundError,
   readQuotaUsage, invalidateQuotaCache, PLAN_QUOTAS,
-} from '@9router-cloud/shared';
+} from '@lazirouter-cloud/shared';
 import { readJson, ok } from '../lib/http.js';
 import { requireSession, requireSuperAdmin } from '../middleware/sessionAuth.js';
 

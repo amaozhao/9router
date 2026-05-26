@@ -1,6 +1,6 @@
 // Lightweight HTTP helpers: JSON body parsing, response writers, route table.
 
-import { ValidationError } from '@9router-cloud/shared';
+import { ValidationError } from '@lazirouter-cloud/shared';
 
 export async function readJson(req, maxBytes = 1 * 1024 * 1024) {
   return new Promise((resolve, reject) => {

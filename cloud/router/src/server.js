@@ -3,7 +3,7 @@
 // readable; Phase 2.5 will introduce a framework if dashboard SSR demands it.
 
 import http from 'node:http';
-import { config, logger, AppError, getRedis, closeRedis, closeDb } from '@9router-cloud/shared';
+import { config, logger, AppError, getRedis, closeRedis, closeDb } from '@lazirouter-cloud/shared';
 import { handleChatCompletions } from './routes/chatCompletions.js';
 import { handleMessages } from './routes/messages.js';
 import { handleResponses } from './routes/responses.js';
@@ -26,7 +26,7 @@ const server = http.createServer(async (req, res) => {
       return await handleResponses(req, res);
     }
     if (req.method === 'GET' && req.url === '/') {
-      return jsonOk(res, { name: '9router-cloud', version: '0.1.0' });
+      return jsonOk(res, { name: 'lazirouter-cloud', version: '0.1.0' });
     }
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: { code: 'not_found', message: 'No route' } }));

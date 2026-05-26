@@ -4,7 +4,7 @@
 // transaction so concurrent signups can't oversubscribe a code.
 
 import crypto from 'node:crypto';
-import { query, ValidationError, NotFoundError } from '@9router-cloud/shared';
+import { query, ValidationError, NotFoundError } from '@lazirouter-cloud/shared';
 import { readJson, ok, noContent } from '../lib/http.js';
 import { requireSuperAdmin } from '../middleware/sessionAuth.js';
 

@@ -6,17 +6,17 @@
 
 import crypto from 'node:crypto';
 import { ProxyAgent } from 'undici';
-import { UpstreamError } from '@9router-cloud/shared';
+import { UpstreamError } from '@lazirouter-cloud/shared';
 
 // Anthropic's gateway TLS-fingerprints Node clients (JA3/JA4) and returns
 // 403 "Request not allowed" for any direct Node HTTP attempt — undici,
 // fetch, node:https, node:http2 all fail. curl and Python urllib succeed.
-// This is an Anthropic-side decision; the upstream 9router project hits the
+// This is an Anthropic-side decision; the upstream lazirouter project hits the
 // same wall and resolves it the same way: route outbound through an HTTP
 // forward proxy that terminates Node's TLS and reconnects with a different
 // stack.
 //
-// Mirroring 9router's proxyAwareFetch design:
+// Mirroring lazirouter's proxyAwareFetch design:
 //   1. Per-connection proxy_url (set in connection.metadata.proxy_url)
 //      — the production path: each tenant's connection chooses its own
 //      egress, can pin region, can route via mitmproxy for audit, etc.

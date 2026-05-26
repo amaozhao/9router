@@ -42,8 +42,8 @@ assert_contains() {
 }
 
 # ── reset
-docker exec 9router-cloud-redis redis-cli FLUSHALL > /dev/null
-docker exec 9router-cloud-pg psql -U router -d router -c \
+docker exec lazirouter-cloud-redis redis-cli FLUSHALL > /dev/null
+docker exec lazirouter-cloud-pg psql -U router -d router -c \
   "TRUNCATE tenants, users, api_keys, connections, combos, pricing, usage_events, usage_summaries, tenant_routing, invite_codes, tenant_quotas RESTART IDENTITY CASCADE" \
   > /dev/null 2>&1
 
@@ -159,7 +159,7 @@ RES=$(curl -s -X POST http://localhost:30200/api/keys \
   -d '{"name":"prod","rateLimitRpm":100}')
 KEY_A=$(echo "$RES" | python3 -c "import sys,json; print(json.load(sys.stdin).get('key',''))")
 KID_A=$(echo "$RES" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
-assert_contains "POST /api/keys A returns plaintext" 'sk-9r-' "$KEY_A"
+assert_contains "POST /api/keys A returns plaintext" 'sk-lr-' "$KEY_A"
 
 # 3.2 list (A sees 2: signup-default + the one just minted in 3.1)
 RES=$(curl -s http://localhost:30200/api/keys -H "Authorization: Bearer $TOK_A")
@@ -193,7 +193,7 @@ RES=$(curl -s -X POST http://localhost:30200/api/keys \
   -H "Authorization: Bearer $TOK_B" -H 'content-type: application/json' \
   -d '{"name":"b-main"}')
 KEY_B=$(echo "$RES" | python3 -c "import sys,json; print(json.load(sys.stdin).get('key',''))")
-assert_contains "POST /api/keys B" 'sk-9r-' "$KEY_B"
+assert_contains "POST /api/keys B" 'sk-lr-' "$KEY_B"
 
 echo "════════════════════════════════════════════════════════════════"
 echo "  4. /api/connections (CRUD + isolation)"
@@ -297,7 +297,7 @@ RES=$(curl -s -X POST http://localhost:30100/v1/chat/completions \
 assert_contains "POST /v1/chat/completions combo: fallback works" 'pong: fallback test' "$RES"
 
 # 6.4 cooldown set after flaky 500
-EXISTS=$(docker exec 9router-cloud-redis redis-cli EXISTS "cooldown:1:flaky:2")
+EXISTS=$(docker exec lazirouter-cloud-redis redis-cli EXISTS "cooldown:1:flaky:2")
 assert_eq "Redis cooldown set after flaky 500" '1' "$EXISTS"
 
 # 6.5 missing model
@@ -351,7 +351,7 @@ echo "════════════════════════�
 echo "  8. Rate limiting"
 echo "════════════════════════════════════════════════════════════════"
 # 8.1 create strict key (rpm=2)
-docker exec 9router-cloud-redis redis-cli FLUSHALL > /dev/null
+docker exec lazirouter-cloud-redis redis-cli FLUSHALL > /dev/null
 sleep 0.2 # avoid mid-second boundary
 RES=$(curl -s -X POST http://localhost:30200/api/keys \
   -H "Authorization: Bearer $TOK_A" -H 'content-type: application/json' \
@@ -399,15 +399,15 @@ assert_contains "POST /api/oauth/mock/start" 'code_challenge=' "$AUTHURL"
 
 # Follow authorize → callback
 curl -s -L "$AUTHURL" > /dev/null
-RES=$(docker exec 9router-cloud-pg psql -U router -d router -tA -c \
+RES=$(docker exec lazirouter-cloud-pg psql -U router -d router -tA -c \
   "SELECT count(*) FROM connections WHERE tenant_id=1 AND provider='mock' AND auth_type='oauth'")
 assert_eq "OAuth callback created connection" '1' "$RES"
 
 # Test refresher rotates the token
-TOKEN_BEFORE=$(docker exec 9router-cloud-pg psql -U router -d router -tA -c \
+TOKEN_BEFORE=$(docker exec lazirouter-cloud-pg psql -U router -d router -tA -c \
   "SELECT credentials_encrypted FROM connections WHERE tenant_id=1 AND auth_type='oauth' AND provider='mock'")
 # Force expires_at to be near now so refresher picks it up
-docker exec 9router-cloud-pg psql -U router -d router -c \
+docker exec lazirouter-cloud-pg psql -U router -d router -c \
   "UPDATE connections SET oauth_expires_at = now() + interval '10 seconds' WHERE tenant_id=1 AND auth_type='oauth' AND provider='mock'" > /dev/null
 node -e "
 const { refreshOnce, registerRefresher } = await import('./worker/src/jobs/tokenRefresher.js');
@@ -419,7 +419,7 @@ process.exit(n === 1 ? 0 : 1);
 REFRESH_RC=$?
 [[ $REFRESH_RC -eq 0 ]] && { PASS=$((PASS+1)); RESULTS+=("  ✓ tokenRefresher rotated 1 row"); } \
                        || { FAIL=$((FAIL+1)); RESULTS+=("  ✗ tokenRefresher did not refresh"); }
-TOKEN_AFTER=$(docker exec 9router-cloud-pg psql -U router -d router -tA -c \
+TOKEN_AFTER=$(docker exec lazirouter-cloud-pg psql -U router -d router -tA -c \
   "SELECT credentials_encrypted FROM connections WHERE tenant_id=1 AND auth_type='oauth' AND provider='mock'")
 [[ "$TOKEN_BEFORE" != "$TOKEN_AFTER" ]] && { PASS=$((PASS+1)); RESULTS+=("  ✓ encrypted credentials blob changed"); } \
                                        || { FAIL=$((FAIL+1)); RESULTS+=("  ✗ blob unchanged after refresh"); }
@@ -438,8 +438,8 @@ N=$(grep -E '^[0-9]+$' /tmp/v-agg.out | tail -1)
                 || { FAIL=$((FAIL+1)); RESULTS+=("  ✗ aggregator produced 0 rows"); }
 
 # Tenant A summary exists; tenant B summary does NOT
-COUNT_A=$(docker exec 9router-cloud-pg psql -U router -d router -tA -c "SELECT count(*) FROM usage_summaries WHERE tenant_id=1")
-COUNT_B=$(docker exec 9router-cloud-pg psql -U router -d router -tA -c "SELECT count(*) FROM usage_summaries WHERE tenant_id=2")
+COUNT_A=$(docker exec lazirouter-cloud-pg psql -U router -d router -tA -c "SELECT count(*) FROM usage_summaries WHERE tenant_id=1")
+COUNT_B=$(docker exec lazirouter-cloud-pg psql -U router -d router -tA -c "SELECT count(*) FROM usage_summaries WHERE tenant_id=2")
 [[ "$COUNT_A" -gt 0 ]] && { PASS=$((PASS+1)); RESULTS+=("  ✓ usage_summaries has tenant 1 rows ($COUNT_A)"); } \
                       || { FAIL=$((FAIL+1)); RESULTS+=("  ✗ tenant 1 has 0 summary rows"); }
 assert_eq "usage_summaries tenant 2 has 0 rows (no usage)" '0' "$COUNT_B"

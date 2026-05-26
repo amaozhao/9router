@@ -24,7 +24,7 @@ function getMasterKey() {
 
 /** Derive a per-tenant 32-byte data encryption key from the master key. */
 function deriveDek(tenantId) {
-  const salt = Buffer.from('9router-cloud-tenant', 'utf8');
+  const salt = Buffer.from('lazirouter-cloud-tenant', 'utf8');
   const info = Buffer.from(`tenant-${tenantId}`, 'utf8');
   return crypto.hkdfSync('sha256', getMasterKey(), salt, info, 32);
 }
@@ -64,9 +64,9 @@ export function sha256Hex(secret) {
   return crypto.createHash('sha256').update(secret).digest('hex');
 }
 
-/** Generate a new client-facing API key (sk-9r-<22 base32 chars>). */
+/** Generate a new client-facing API key (sk-lr-<22 base32 chars>). */
 export function generateApiKey() {
   const random = crypto.randomBytes(20);
   const body = random.toString('base64url').slice(0, 28);
-  return `sk-9r-${body}`;
+  return `sk-lr-${body}`;
 }

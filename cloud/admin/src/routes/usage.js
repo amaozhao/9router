@@ -1,6 +1,6 @@
 // /api/usage — read-only usage views for the current tenant.
 
-import { query } from '@9router-cloud/shared';
+import { query } from '@lazirouter-cloud/shared';
 import { ok } from '../lib/http.js';
 import { requireSession } from '../middleware/sessionAuth.js';
 

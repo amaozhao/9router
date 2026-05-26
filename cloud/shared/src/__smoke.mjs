@@ -41,7 +41,7 @@ async function main() {
 
   // 6) API key gen + hash
   const k = generateApiKey();
-  if (!k.startsWith('sk-9r-') || k.length < 30) throw new Error('api key format wrong');
+  if (!k.startsWith('sk-lr-') || k.length < 30) throw new Error('api key format wrong');
   const h = sha256Hex(k);
   if (h.length !== 64) throw new Error('hash length wrong');
   logger.info({ prefix: k.slice(0, 14), hash_prefix: h.slice(0, 12) }, 'api key OK');

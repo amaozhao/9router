@@ -11,8 +11,8 @@ import crypto from 'node:crypto';
 import {
   logger, ValidationError, UpstreamError, AuthError,
   NoAccountAvailableError, AppError,
-} from '@9router-cloud/shared';
-import { enforceDailyQuota } from '@9router-cloud/shared';
+} from '@lazirouter-cloud/shared';
+import { enforceDailyQuota } from '@lazirouter-cloud/shared';
 import { resolveApiKey, enforceTenantActive } from '../middleware/edgeAuth.js';
 import { enforceRateLimit } from '../middleware/rateLimit.js';
 import { pickAccount, markCooldown } from '../services/accountPicker.js';

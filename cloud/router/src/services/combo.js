@@ -11,7 +11,7 @@
 // The result is an array of attempt descriptors; the route layer iterates
 // them and stops at the first success.
 
-import { query, ValidationError } from '@9router-cloud/shared';
+import { query, ValidationError } from '@lazirouter-cloud/shared';
 
 export async function resolveAttempts(tenantId, modelInput) {
   if (!modelInput || typeof modelInput !== 'string') {
@@ -55,7 +55,7 @@ export async function resolveAttempts(tenantId, modelInput) {
     }];
   }
 
-  // Heuristic for raw model id (matches the historical 9router behaviour).
+  // Heuristic for raw model id (matches the historical lazirouter behaviour).
   // GPT and o-series default to `codex` — the ChatGPT subscription path —
   // because that's the only OpenAI-side route a user normally has without
   // an API key. Callers who want the api-key OpenAI path can still send

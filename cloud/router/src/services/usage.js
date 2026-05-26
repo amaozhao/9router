@@ -1,7 +1,7 @@
 // Usage recording. Phase 1: synchronous INSERT into usage_events.
 // Phase 4 swaps this for a Kafka producer; the call sites won't change.
 
-import { query, logger, incrementTokenUsage } from '@9router-cloud/shared';
+import { query, logger, incrementTokenUsage } from '@lazirouter-cloud/shared';
 
 export async function recordUsage(event) {
   const totalTokens = (event.promptTokens ?? 0) + (event.completionTokens ?? 0);

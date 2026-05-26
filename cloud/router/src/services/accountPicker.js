@@ -9,7 +9,7 @@
 // cooling down we throw NoAccountAvailableError; callers may decide to fall back
 // to a different combo step.
 
-import { query, getRedis, decryptForTenant, NoAccountAvailableError, logger } from '@9router-cloud/shared';
+import { query, getRedis, decryptForTenant, NoAccountAvailableError, logger } from '@lazirouter-cloud/shared';
 
 const CONN_CACHE_TTL_SEC = 5;
 const COOLDOWN_DEFAULT_SEC = 60;

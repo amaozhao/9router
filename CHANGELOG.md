@@ -136,7 +136,7 @@
 
 ## Features
 - Add MiniMax TTS provider support (#1043)
-- Docker images now published on both Docker Hub (`decolua/9router`) and GHCR — pull from your preferred registry
+- Docker images now published on both Docker Hub (`decolua/lazirouter`) and GHCR — pull from your preferred registry
 
 ## Improvements
 - Replace browser confirm dialogs with custom ConfirmModal (#1060)
@@ -164,7 +164,7 @@
 - CLI: reset auth mode to password (emergency OIDC lockout recovery)
 
 ## Fixes
-- DATA_DIR: graceful fallback to ~/.9router on EACCES/EPERM (#1005)
+- DATA_DIR: graceful fallback to ~/.lazirouter on EACCES/EPERM (#1005)
 - React hooks: variable declaration order & lazy initialization (#1017)
 
 ## Improvements
@@ -272,7 +272,7 @@
 # v0.4.18 (2026-05-05)
 
 ## Features
-- Speech-to-Text: full pipeline with sttCore + /v1/audio/transcriptions; configs for OpenAI, Gemini, Groq, Deepgram, AssemblyAI, HuggingFace, NVIDIA Parakeet; new 9router-stt skill
+- Speech-to-Text: full pipeline with sttCore + /v1/audio/transcriptions; configs for OpenAI, Gemini, Groq, Deepgram, AssemblyAI, HuggingFace, NVIDIA Parakeet; new lazirouter-stt skill
 - Gemini TTS: dedicated provider with 30 prebuilt voices
 - Usage quotas: GLM (intl/cn) and MiniMax (intl/cn) fetchers; Gemini CLI usage via retrieveUserQuota per-model buckets
 - Disabled models: lowdb-backed disabledModelsDb + /api/models/disabled route
@@ -286,7 +286,7 @@
 - Reorder hermes provider, drop qwen STT kind
 
 ## Fixes
-- Fix skills metadata/text in 9router, chat, embeddings, image, tts, web-fetch, web-search SKILL.md and skills page
+- Fix skills metadata/text in lazirouter, chat, embeddings, image, tts, web-fetch, web-search SKILL.md and skills page
 
 # v0.4.16 (2026-05-04)
 
@@ -324,7 +324,7 @@
 ## Fixes
 - Include alias-backed models in /v1/models listing
 - Improve cloudflared exit code error messages
-- Redirect ~/.9router to DATA_DIR in Docker (persist usage across updates)
+- Redirect ~/.lazirouter to DATA_DIR in Docker (persist usage across updates)
 - Prevent SSE listener leak in console-logs stream
 - Gate MITM sudo prompts on server platform
 - Fix Azure validation and persistence (providerSpecificData, Organization required)

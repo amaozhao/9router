@@ -1,13 +1,13 @@
 # Cline Integration
 
-Integrate 9Router with Cline VSCode extension to route your AI requests through 9Router's intelligent routing system.
+Integrate LaziRouter with Cline VSCode extension to route your AI requests through LaziRouter's intelligent routing system.
 
 ## Prerequisites
 
 - Visual Studio Code installed
 - Cline extension installed from VSCode marketplace
-- 9Router running locally or cloud endpoint configured
-- API key from 9Router dashboard
+- LaziRouter running locally or cloud endpoint configured
+- API key from LaziRouter dashboard
 
 ## Setup
 
@@ -25,33 +25,33 @@ Integrate 9Router with Cline VSCode extension to route your AI requests through 
 
 ### 3. Configure Base URL
 
-Set the base URL to your 9Router endpoint:
+Set the base URL to your LaziRouter endpoint:
 
-**For Local 9Router:**
+**For Local LaziRouter:**
 ```
 http://localhost:20128/v1
 ```
 
-**For Cloud 9Router:**
+**For Cloud LaziRouter:**
 ```
-https://9router.com
+https://lazirouter.com
 ```
 
 **Steps:**
-1. In the **Base URL** field, enter your 9Router endpoint
+1. In the **Base URL** field, enter your LaziRouter endpoint
 2. Make sure to include `/v1` at the end
 
 ### 4. Add API Key
 
-1. In the **API Key** field, enter your 9Router API key
-2. You can find your API key in the 9Router dashboard under **Settings → API Keys**
-3. The key should start with `sk-9router-`
+1. In the **API Key** field, enter your LaziRouter API key
+2. You can find your API key in the LaziRouter dashboard under **Settings → API Keys**
+3. The key should start with `sk-lazirouter-`
 
 ### 5. Select Model
 
 1. In the **Model** dropdown, you can either:
    - Select from available models (if Cline auto-detects them)
-   - Manually enter the model name from your 9Router configuration
+   - Manually enter the model name from your LaziRouter configuration
 
 2. Common model names:
    - `gpt-4`
@@ -71,13 +71,13 @@ Your Cline settings should look like this:
 ```
 API Provider: Ollama
 Base URL: http://localhost:20128/v1
-API Key: sk-9router-xxxxxxxxxxxxx
+API Key: sk-lazirouter-xxxxxxxxxxxxx
 Model: gpt-4
 ```
 
 ## Available Models
 
-You can use any model configured in your 9Router dashboard. Common examples:
+You can use any model configured in your LaziRouter dashboard. Common examples:
 
 | Model Name | Provider | Description |
 |------------|----------|-------------|
@@ -94,64 +94,64 @@ You can use any model configured in your 9Router dashboard. Common examples:
 1. Open the Cline panel in VSCode
 2. Type your message in the chat input
 3. Press Enter to send
-4. Cline will use 9Router to process your request
+4. Cline will use LaziRouter to process your request
 
 ### Code Generation
 
 1. Ask Cline to generate code: "Create a React component for a login form"
-2. Cline will generate code using 9Router
+2. Cline will generate code using LaziRouter
 3. Review and accept the generated code
 
 ### Code Explanation
 
 1. Select code in your editor
 2. Ask Cline: "Explain this code"
-3. Get AI-powered explanations through 9Router
+3. Get AI-powered explanations through LaziRouter
 
 ### File Operations
 
 1. Ask Cline to create, modify, or delete files
-2. Cline will use 9Router to understand context and make changes
+2. Cline will use LaziRouter to understand context and make changes
 3. Review changes before accepting
 
 ## Troubleshooting
 
 ### "Connection Failed" Error
 
-1. Verify 9Router is running: `curl http://localhost:20128/health`
+1. Verify LaziRouter is running: `curl http://localhost:20128/health`
 2. Check that the base URL is correct and includes `/v1`
 3. Ensure no firewall is blocking port 20128
 4. Try restarting VSCode
 
 ### "Invalid API Key" Error
 
-1. Verify your API key in 9Router dashboard
-2. Make sure you copied the entire key including the `sk-9router-` prefix
+1. Verify your API key in LaziRouter dashboard
+2. Make sure you copied the entire key including the `sk-lazirouter-` prefix
 3. Check that the API key has not expired
 4. Try regenerating a new API key
 
 ### "Model Not Found" Error
 
-1. Verify the model name matches exactly with your 9Router configuration
-2. Check that the provider connection is active in 9Router dashboard
+1. Verify the model name matches exactly with your LaziRouter configuration
+2. Check that the provider connection is active in LaziRouter dashboard
 3. Ensure the model is available in your connected providers
 4. Try using the full model name (e.g., `openai/gpt-4` instead of `gpt-4`)
 
 ### Cline Not Responding
 
 1. Check the Cline output panel for error messages
-2. Verify your 9Router instance is running and healthy
+2. Verify your LaziRouter instance is running and healthy
 3. Try reloading VSCode window (Cmd/Ctrl + Shift + P → "Reload Window")
-4. Check 9Router logs for any errors
+4. Check LaziRouter logs for any errors
 
 ## Advanced Configuration
 
 ### Using Cloud Endpoint
 
-To use 9Router cloud endpoint instead of localhost:
+To use LaziRouter cloud endpoint instead of localhost:
 
-1. In Cline settings, set Base URL to: `https://9router.com`
-2. Make sure you have configured your API key in the 9Router cloud dashboard
+1. In Cline settings, set Base URL to: `https://lazirouter.com`
+2. Make sure you have configured your API key in the LaziRouter cloud dashboard
 3. Ensure your cloud endpoint is active and accessible
 
 ### Multiple Models
@@ -173,16 +173,16 @@ If you experience timeout issues with large requests:
 ## Best Practices
 
 1. **Use Appropriate Models**: Choose faster models (like Haiku or Flash) for simple tasks, and more powerful models (like Opus or GPT-4) for complex tasks
-2. **Monitor Usage**: Check 9Router dashboard for usage statistics and costs
+2. **Monitor Usage**: Check LaziRouter dashboard for usage statistics and costs
 3. **Context Management**: Keep your conversations focused to reduce token usage
 4. **Model Switching**: Switch models based on task complexity to optimize cost and performance
 5. **API Key Security**: Never commit your API key to version control
 
-## Integration with 9Router Features
+## Integration with LaziRouter Features
 
 ### Model Routing
 
-9Router automatically routes your requests to the best available provider based on:
+LaziRouter automatically routes your requests to the best available provider based on:
 - Model availability
 - Provider health status
 - Cost optimization
@@ -190,11 +190,11 @@ If you experience timeout issues with large requests:
 
 ### Fallback Support
 
-If a provider fails, 9Router automatically falls back to alternative providers configured in your dashboard.
+If a provider fails, LaziRouter automatically falls back to alternative providers configured in your dashboard.
 
 ### Usage Tracking
 
-Monitor your Cline usage through 9Router dashboard:
+Monitor your Cline usage through LaziRouter dashboard:
 - Total requests
 - Token usage
 - Cost per model

@@ -1,4 +1,4 @@
--- 0001_init.sql — multi-tenant schema for cloud 9router
+-- 0001_init.sql — multi-tenant schema for cloud lazirouter
 -- All business tables carry a tenant_id foreign key. Postgres-only.
 
 BEGIN;
@@ -34,14 +34,14 @@ CREATE UNIQUE INDEX users_email_lower_unique ON users (LOWER(email));
 CREATE INDEX users_tenant_idx ON users (tenant_id);
 
 -- ============================================================
--- API Keys (client-facing; sk-9r-xxx → tenant_id)
+-- API Keys (client-facing; sk-lr-xxx → tenant_id)
 -- ============================================================
 
 CREATE TABLE api_keys (
   id              BIGSERIAL PRIMARY KEY,
   tenant_id       BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   created_by      BIGINT REFERENCES users(id) ON DELETE SET NULL,
-  key_prefix      TEXT NOT NULL,           -- e.g. sk-9r-abcd
+  key_prefix      TEXT NOT NULL,           -- e.g. sk-lr-abcd
   key_hash        TEXT NOT NULL UNIQUE,    -- sha256(key)
   name            TEXT,
   scopes          JSONB NOT NULL DEFAULT '{}'::jsonb,

@@ -82,7 +82,7 @@ function AuthPage() {
   return html`
     <div class="auth-page">
       <form class="auth-card" onSubmit=${submit}>
-        <h1>${mode === 'login' ? '登录 9Router Cloud' : '创建账户'}</h1>
+        <h1>${mode === 'login' ? '登录 LaziRouter Cloud' : '创建账户'}</h1>
         <p>${mode === 'login' ? '用 email + 密码登录' : '内测期间需要邀请码才能注册'}</p>
         <label>Email</label>
         <input type="email" required value=${email} onChange=${e => setEmail(e.target.value)} />
@@ -151,7 +151,7 @@ function Shell({ children, current, onNav }) {
   return html`
     <div class="app">
       <aside class="sidebar">
-        <div class="brand">9router · cloud</div>
+        <div class="brand">lazirouter · cloud</div>
         <nav>
           ${items.map(i => html`
             <a key=${i.key} class=${current === i.key ? 'active' : ''} onClick=${() => onNav(i.key)}>${i.label}</a>

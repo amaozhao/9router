@@ -2,7 +2,7 @@
 // Plaintext credentials are encrypted with the per-tenant DEK before storage
 // and never read back (the response only describes shape).
 
-import { query, encryptForTenant, NotFoundError, ValidationError, getRedis } from '@9router-cloud/shared';
+import { query, encryptForTenant, NotFoundError, ValidationError, getRedis } from '@lazirouter-cloud/shared';
 import { readJson, ok, noContent } from '../lib/http.js';
 import { requireSession, requireRole } from '../middleware/sessionAuth.js';
 

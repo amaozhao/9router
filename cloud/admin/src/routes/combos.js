@@ -1,6 +1,6 @@
 // /api/combos — fallback-chain CRUD.
 
-import { query, NotFoundError, ValidationError } from '@9router-cloud/shared';
+import { query, NotFoundError, ValidationError } from '@lazirouter-cloud/shared';
 import { readJson, ok, noContent } from '../lib/http.js';
 import { requireSession, requireRole } from '../middleware/sessionAuth.js';
 

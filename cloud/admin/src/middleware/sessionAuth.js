@@ -1,6 +1,6 @@
 // Session auth for the admin API — verifies the Authorization: Bearer <jwt> header.
 
-import { AuthError, ForbiddenError, isSuperAdminEmail, query } from '@9router-cloud/shared';
+import { AuthError, ForbiddenError, isSuperAdminEmail, query } from '@lazirouter-cloud/shared';
 import { verifyJwt } from '../lib/jwt.js';
 
 export function requireSession(req) {

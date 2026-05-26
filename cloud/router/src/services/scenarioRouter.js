@@ -5,7 +5,7 @@
 import {
   query, getRedis, ValidationError, logger,
   tenantRoutingKey, invalidateTenantRouting,
-} from '@9router-cloud/shared';
+} from '@lazirouter-cloud/shared';
 
 const CACHE_TTL_SECONDS = 30;
 

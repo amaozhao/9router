@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: 9router-cloud-pg
+    container_name: lazirouter-cloud-pg
     environment:
       POSTGRES_USER: router
       POSTGRES_PASSWORD: router_dev_pw
@@ -18,7 +18,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: 9router-cloud-redis
+    container_name: lazirouter-cloud-redis
     ports:
       - "56379:6379"
     command: ["redis-server", "--appendonly", "yes"]

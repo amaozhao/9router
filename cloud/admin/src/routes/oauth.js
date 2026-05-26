@@ -6,7 +6,7 @@
 
 import {
   query, encryptForTenant, getRedis, ValidationError, NotFoundError, UpstreamError,
-} from '@9router-cloud/shared';
+} from '@lazirouter-cloud/shared';
 import crypto from 'node:crypto';
 import { readJson, ok } from '../lib/http.js';
 import { requireSession, requireRole } from '../middleware/sessionAuth.js';
@@ -202,7 +202,7 @@ export async function importOauth(req, res, { params }) {
   ]);
 
   // Hot-reload accountPicker view of this tenant's connections
-  const { getRedis: _gr } = await import('@9router-cloud/shared');
+  const { getRedis: _gr } = await import('@lazirouter-cloud/shared');
   await _gr().del(`conn_cache:${session.tenantId}:${providerName}`);
 
   ok(res, {
@@ -222,7 +222,7 @@ function defaultRedirectUri(req) {
 function renderResult(res, status, payload) {
   res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
   res.end(`<!doctype html>
-<html><head><meta charset="utf-8"><title>9router OAuth</title>
+<html><head><meta charset="utf-8"><title>lazirouter OAuth</title>
 <style>body{font-family:system-ui;background:#0d1117;color:#c9d1d9;padding:48px;text-align:center}
 pre{display:inline-block;text-align:left;background:#161b22;padding:16px;border-radius:8px;border:1px solid #30363d}</style>
 </head><body>

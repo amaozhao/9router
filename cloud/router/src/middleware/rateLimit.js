@@ -13,7 +13,7 @@
 //   pro      → 6000 rpm
 // Customize in PLAN_LIMITS as needed.
 
-import { getRedis, RateLimitError } from '@9router-cloud/shared';
+import { getRedis, RateLimitError } from '@lazirouter-cloud/shared';
 
 const PLAN_LIMITS = {
   free: 60,

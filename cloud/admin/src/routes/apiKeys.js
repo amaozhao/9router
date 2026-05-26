@@ -1,7 +1,7 @@
 // /api/keys — client-facing API key management.
 // list / create / revoke. Key plaintext is shown ONLY at creation time.
 
-import { query, sha256Hex, generateApiKey, NotFoundError, getRedis } from '@9router-cloud/shared';
+import { query, sha256Hex, generateApiKey, NotFoundError, getRedis } from '@lazirouter-cloud/shared';
 import { readJson, ok, noContent } from '../lib/http.js';
 import { requireSession, requireRole } from '../middleware/sessionAuth.js';
 

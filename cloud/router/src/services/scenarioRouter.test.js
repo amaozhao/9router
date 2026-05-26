@@ -8,7 +8,7 @@ import {
   query, getRedis, closeDb, closeRedis,
   tenantRoutingKey, invalidateTenantRouting,
   ValidationError,
-} from '@9router-cloud/shared';
+} from '@lazirouter-cloud/shared';
 import { resolveScenarioTarget } from './scenarioRouter.js';
 
 const TID = 777_777;

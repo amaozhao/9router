@@ -2,7 +2,7 @@
 // Tokens carry { sub: user_id, tid: tenant_id, role, iat, exp }.
 
 import crypto from 'node:crypto';
-import { config, AuthError } from '@9router-cloud/shared';
+import { config, AuthError } from '@lazirouter-cloud/shared';
 
 const ALG = { alg: 'HS256', typ: 'JWT' };
 

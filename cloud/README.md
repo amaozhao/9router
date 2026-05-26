@@ -1,12 +1,12 @@
-# 9router Cloud — Multi-tenant SaaS
+# lazirouter Cloud — Multi-tenant SaaS
 
-云端多租户版 9router。沿用 9router 的协议路由、RTK 压缩、provider executor 等无状态核心理念，新增完整的租户隔离、加密凭证、Redis 化负载均衡、独立计费等 SaaS 能力。
+云端多租户版 lazirouter。沿用 lazirouter 的协议路由、RTK 压缩、provider executor 等无状态核心理念，新增完整的租户隔离、加密凭证、Redis 化负载均衡、独立计费等 SaaS 能力。
 
 ## 一句话说清楚架构
 
 ```
               ┌───────────────────────────┐
-   client →  │  Edge Auth                 │  sk-9r-xxx → tenant
+   client →  │  Edge Auth                 │  sk-lr-xxx → tenant
    (Claude   │  Rate Limit                │  Redis cache (<1ms)
    Code /    │  Combo / Account Picker    │  fallback + round-robin
    Codex /   │  Translator (Anthropic↔   │  Redis-backed cursors & cooldowns
@@ -99,7 +99,7 @@ open http://localhost:30300
 
 | 能力 | 实现位置 | 验证测试 |
 |---|---|---|
-| **客户端 sk-9r-** → tenant 映射 | `router/middleware/edgeAuth.js` | ✅ 401 测试覆盖 |
+| **客户端 sk-lr-** → tenant 映射 | `router/middleware/edgeAuth.js` | ✅ 401 测试覆盖 |
 | **每分钟 rate limit** | `router/middleware/rateLimit.js` | ✅ 第 4 个请求 429 |
 | **Combo fallback** | `router/services/combo.js` + `routes/chatCompletions.js` | ✅ flaky→500→mock→200，cooldown 落 Redis |
 | **多账号 round-robin** | `router/services/accountPicker.js` | ✅ A B C A B C；禁用 B 后 A C A C |
@@ -120,14 +120,14 @@ open http://localhost:30300
 ### Claude Code
 ```
 Endpoint:    http://localhost:30100/v1
-Header:      x-api-key: sk-9r-xxxxxxxx
+Header:      x-api-key: sk-lr-xxxxxxxx
 Model:       combo:claude-fallback   (or anthropic:claude-3-5-sonnet)
 ```
 
 ### Codex / OpenCode / Cursor / Cline
 ```
 Endpoint:    http://localhost:30100/v1
-Auth:        Authorization: Bearer sk-9r-xxxxxxxx
+Auth:        Authorization: Bearer sk-lr-xxxxxxxx
 Model:       combo:smart   (or openai:gpt-4 / glm:glm-4.6 / ...)
 ```
 
@@ -282,9 +282,9 @@ cloud/
                 └── openaiOAuth.js
 ```
 
-## 与原 9router 的对比
+## 与原 lazirouter 的对比
 
-| 维度 | 原 9router (单租户本地) | 9router cloud (多租户云端) |
+| 维度 | 原 lazirouter (单租户本地) | lazirouter cloud (多租户云端) |
 |---|---|---|
 | 存储 | SQLite (4 driver) | Postgres |
 | 凭证 | 明文 JSON | KMS-envelope 加密 |
@@ -301,4 +301,4 @@ cloud/
 
 ## License
 
-继承上游 9router 项目的开源 license。
+继承上游 lazirouter 项目的开源 license。

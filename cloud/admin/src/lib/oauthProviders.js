@@ -6,7 +6,7 @@
 
 import crypto from 'node:crypto';
 import { request } from 'undici';
-import { ValidationError, UpstreamError } from '@9router-cloud/shared';
+import { ValidationError, UpstreamError } from '@lazirouter-cloud/shared';
 
 const PROVIDERS = {
   // Test-only provider; mocks PKCE flow when MOCK_OAUTH_BASE is set.

@@ -14,7 +14,7 @@
 
 import {
   query, encryptForTenant, decryptForTenant, getRedis, logger,
-} from '@9router-cloud/shared';
+} from '@lazirouter-cloud/shared';
 
 const log = logger.child({ job: 'token-refresher' });
 

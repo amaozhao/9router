@@ -2,12 +2,12 @@
 // the OpenAI Chat Completions API: GLM (zhipuai), DeepSeek, MiniMax,
 // official OpenAI, OpenRouter, Together, Groq, etc.
 //
-// The full 9router open-sse executor catalog (13 subclasses, Claude/Cursor/
+// The full lazirouter open-sse executor catalog (13 subclasses, Claude/Cursor/
 // Codex/Antigravity/Gemini etc.) plugs in here in Phase 3; for Phase 1 we keep
 // the surface deliberately small so we can prove the end-to-end loop.
 
 import { request as undiciRequest } from 'undici';
-import { UpstreamError } from '@9router-cloud/shared';
+import { UpstreamError } from '@lazirouter-cloud/shared';
 
 /**
  * Stream a chat completion from an OpenAI-compatible upstream.

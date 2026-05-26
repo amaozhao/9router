@@ -1,0 +1,102 @@
+# Production single-host stack: postgres + redis + admin + router + worker.
+# All three Go binaries live in the same image; each service overrides the
+# command to pick which one runs.
+#
+# First-time setup:
+#   cp .env.production.example .env.production
+#   edit .env.production (JWT_SECRET + CLOUD_MASTER_KEY required)
+#   docker compose -f docker-compose.prod.yml --env-file .env.production build
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d migrate
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-router}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-router_dev_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-router}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-router} -d ${POSTGRES_DB:-router}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot migration runner. Bundled Go binary; reads /app/migrations.
+  migrate:
+    build: .
+    image: lazirouter:latest
+    command: ["/app/migrate"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-router}:${POSTGRES_PASSWORD:-router_dev_pw}@postgres:5432/${POSTGRES_DB:-router}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  admin:
+    build: .
+    image: lazirouter:latest
+    restart: unless-stopped
+    command: ["/app/admin"]
+    environment: &go_env
+      DATABASE_URL: postgres://${POSTGRES_USER:-router}:${POSTGRES_PASSWORD:-router_dev_pw}@postgres:5432/${POSTGRES_DB:-router}
+      REDIS_URL: redis://redis:6379/0
+      CLOUD_MASTER_KEY: ${CLOUD_MASTER_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      SUPER_ADMIN_EMAILS: ${SUPER_ADMIN_EMAILS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      HTTPS_PROXY: ${UPSTREAM_HTTPS_PROXY:-}
+      DISALLOW_ENV_PROXY: ${DISALLOW_ENV_PROXY:-0}
+    ports:
+      - "${ADMIN_PORT:-30200}:30200"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  router:
+    build: .
+    image: lazirouter:latest
+    restart: unless-stopped
+    command: ["/app/router"]
+    environment: *go_env
+    ports:
+      - "${ROUTER_PORT:-30100}:30100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    image: lazirouter:latest
+    restart: unless-stopped
+    command: ["/app/worker"]
+    environment: *go_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pg_data:
+  redis_data:

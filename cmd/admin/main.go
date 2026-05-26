@@ -91,6 +91,18 @@ func main() {
 	mux.HandleFunc("GET /api/usage/summary", d.UsageSummary)
 	mux.HandleFunc("GET /api/usage/recent", d.UsageRecent)
 
+	// Static admin-ui (SPA fallback). Resolved from ADMIN_UI_DIR env or "./admin-ui".
+	uiDir := os.Getenv("ADMIN_UI_DIR")
+	if uiDir == "" {
+		uiDir = "./admin-ui"
+	}
+	if admin.StaticUIExists(uiDir) {
+		mux.Handle("/", admin.MountStaticUI(uiDir))
+		logger.Info("admin-ui mounted", "dir", uiDir)
+	} else {
+		logger.Warn("admin-ui dir not found; UI disabled", "dir", uiDir)
+	}
+
 	// Invites (super-admin)
 	mux.HandleFunc("POST /api/admin/invites", d.MintInvite)
 	mux.HandleFunc("GET /api/admin/invites", d.ListInvites)

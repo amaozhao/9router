@@ -13,6 +13,7 @@ import {
   ValidationError, UpstreamError, AuthError,
   NoAccountAvailableError, AppError,
 } from '@9router-cloud/shared';
+import { enforceDailyQuota } from '@9router-cloud/shared';
 import { resolveApiKey, enforceTenantActive } from '../middleware/edgeAuth.js';
 import { enforceRateLimit } from '../middleware/rateLimit.js';
 import { pickAccount, markCooldown } from '../services/accountPicker.js';
@@ -33,6 +34,7 @@ export async function handleResponses(req, res) {
   const ctx = await resolveApiKey(apiKey);
   enforceTenantActive(ctx);
   await enforceRateLimit(ctx);
+  await enforceDailyQuota(ctx);
 
   const body = await readJson(req);
   if (!body.model) throw new ValidationError('Missing field: model');
@@ -118,19 +120,46 @@ export async function handleResponses(req, res) {
   throw new UpstreamError('All upstream attempts failed', { attempts: errors });
 }
 
+// Pull the authoritative {input_tokens, output_tokens} from a SSE frame.
+// The Responses API emits multiple usage-shaped objects per response
+// (image_gen / web_search tool usage are zero-valued and nested), so a plain
+// regex on "input_tokens" picks up the wrong one. We target the
+// `response.completed` event specifically and JSON-parse `data.response.usage`.
+function extractUsage(frame) {
+  // Frames may contain several SSE events delimited by blank lines. Find the
+  // last response.completed in this chunk (typical: it is the last frame).
+  const lines = frame.split('\n');
+  let event = null;
+  let lastData = null;
+  for (const ln of lines) {
+    if (ln.startsWith('event: ')) event = ln.slice(7).trim();
+    else if (ln.startsWith('data: ') && event === 'response.completed') lastData = ln.slice(6);
+    else if (ln === '') event = null;
+  }
+  if (!lastData) return null;
+  try {
+    const obj = JSON.parse(lastData);
+    const u = obj?.response?.usage;
+    if (!u) return null;
+    return {
+      promptTokens:     Number(u.input_tokens)  || 0,
+      completionTokens: Number(u.output_tokens) || 0,
+    };
+  } catch { return null; }
+}
+
 async function handleNonStream({ res, upstream, credentials, metadata, upstreamBody, sessionContext, usageBase, startedAt }) {
   // Codex backend always streams; we collect the stream and re-emit JSON.
   // For now we forward the SSE text as-is to a JSON-headers response so the
   // client can pick frames out — most non-streaming Responses callers parse
-  // the same way. Token accounting is sniffed from the response.completed
-  // frame which contains a `usage` block.
+  // the same way.
   let buf = '';
   let promptTokens = 0;
   let completionTokens = 0;
   for await (const frame of upstream.stream({ credentials, metadata, body: upstreamBody, sessionContext })) {
     buf += frame;
-    const m = /"usage"\s*:\s*\{[^}]*"input_tokens"\s*:\s*(\d+)[^}]*"output_tokens"\s*:\s*(\d+)/.exec(frame);
-    if (m) { promptTokens = Number(m[1]); completionTokens = Number(m[2]); }
+    const u = extractUsage(frame);
+    if (u) { promptTokens = u.promptTokens; completionTokens = u.completionTokens; }
   }
   const pricing = await getPricing(usageBase.tenantId, usageBase.provider, usageBase.upstreamModel);
   const costMicros = computeCost(pricing, promptTokens, completionTokens);
@@ -161,10 +190,8 @@ async function handleStream({ req, res, upstream, credentials, metadata, upstrea
       headersSent = true;
     }
     res.write(frame);
-    const pin  = /"input_tokens"\s*:\s*(\d+)/.exec(frame);
-    const pout = /"output_tokens"\s*:\s*(\d+)/.exec(frame);
-    if (pin)  promptTokens = Number(pin[1]);
-    if (pout) completionTokens = Number(pout[1]);
+    const u = extractUsage(frame);
+    if (u) { promptTokens = u.promptTokens; completionTokens = u.completionTokens; }
   }
   res.end();
 

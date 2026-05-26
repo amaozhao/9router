@@ -12,6 +12,7 @@ import {
   logger, ValidationError, UpstreamError, AuthError,
   NoAccountAvailableError, AppError,
 } from '@9router-cloud/shared';
+import { enforceDailyQuota } from '@9router-cloud/shared';
 import { resolveApiKey, enforceTenantActive } from '../middleware/edgeAuth.js';
 import { enforceRateLimit } from '../middleware/rateLimit.js';
 import { pickAccount, markCooldown } from '../services/accountPicker.js';
@@ -39,6 +40,7 @@ export async function handleMessages(req, res) {
   const ctx = await resolveApiKey(effectiveKey);
   enforceTenantActive(ctx);
   await enforceRateLimit(ctx);
+  await enforceDailyQuota(ctx);
 
   const anthropicBody = await readJson(req);
   if (!Array.isArray(anthropicBody.messages)) throw new ValidationError('Missing field: messages[]');

@@ -13,6 +13,9 @@ export DATABASE_URL="${DATABASE_URL:-postgres://router:router_dev_pw@localhost:5
 export REDIS_URL="${REDIS_URL:-redis://localhost:56379/0}"
 export CLOUD_MASTER_KEY="${CLOUD_MASTER_KEY:-+rB3s6hXL3gKZmhnywQQeMNUwiWSLkIo7wJRWa3BrY4=}"
 export JWT_SECRET='verify-auto-routing'
+# Fixed bootstrap super-admin email — used to mint invite codes for the
+# scratch tenants A/B created below.
+export SUPER_ADMIN_EMAILS='verify-routing-admin@x.io'
 
 # Container names (overridable for non-default deployments)
 PG_CONTAINER="${PG_CONTAINER:-9router-cloud-pg}"
@@ -45,9 +48,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ── Reset: drop any scratch tenants from prior runs.
+# ── Reset: drop any scratch tenants from prior runs (cascades to invite_codes via created_by FK).
 docker exec "$PG_CONTAINER" psql -U router -d router -q \
-  -c "DELETE FROM tenants WHERE name LIKE 'verify-routing-%'" >/dev/null 2>&1 || true
+  -c "DELETE FROM tenants WHERE name LIKE 'verify-routing-%' OR name LIKE 'verify-routing-admin%'" >/dev/null 2>&1 || true
+docker exec "$PG_CONTAINER" psql -U router -d router -q \
+  -c "DELETE FROM invite_codes WHERE note = 'verify-auto-routing'" >/dev/null 2>&1 || true
 
 # Flush routing cache so stale keys don't bleed over.
 docker exec "$REDIS_CONTAINER" redis-cli KEYS 'routing:*' \
@@ -72,21 +77,40 @@ fi
 
 echo "Services up. Running assertions..."
 
-# ── Sign up tenant A
+# ── Bootstrap super-admin (skips invite gate) and use it to mint invite codes.
 TS=$(date +%s)
+RESP_ADMIN=$(curl -s -X POST http://localhost:30200/auth/signup \
+  -H 'content-type: application/json' \
+  -d "{\"email\":\"verify-routing-admin@x.io\",\"password\":\"abcd1234abcd\",\"tenantName\":\"verify-routing-admin-${TS}\"}")
+TOKEN_ADMIN=$(python3 -c "import sys,json; d=json.loads(sys.argv[1]); print(d.get('token',''))" "$RESP_ADMIN" 2>/dev/null)
+if [[ -z "$TOKEN_ADMIN" ]]; then
+  echo "ERROR: bootstrap super-admin failed: $RESP_ADMIN"; exit 1
+fi
+
+mint_invite() {
+  curl -s -X POST http://localhost:30200/api/admin/invites \
+    -H 'content-type: application/json' -H "Authorization: Bearer $TOKEN_ADMIN" \
+    -d '{"maxUses":1,"note":"verify-auto-routing"}' \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['code'])"
+}
+
+INVITE_A=$(mint_invite)
+INVITE_B=$(mint_invite)
+
+# ── Sign up tenant A (with invite)
 RESP_A=$(curl -s -X POST http://localhost:30200/auth/signup \
   -H 'content-type: application/json' \
-  -d "{\"email\":\"verify-routing-a-${TS}@x.io\",\"password\":\"abcd1234abcd\",\"tenantName\":\"verify-routing-a-${TS}\"}")
+  -d "{\"email\":\"verify-routing-a-${TS}@x.io\",\"password\":\"abcd1234abcd\",\"tenantName\":\"verify-routing-a-${TS}\",\"inviteCode\":\"${INVITE_A}\"}")
 TOKEN_A=$(python3 -c "import sys,json; d=json.loads(sys.argv[1]); print(d.get('token',''))" "$RESP_A" 2>/dev/null)
 TENANT_A_ID=$(python3 -c "import sys,json; d=json.loads(sys.argv[1]); print(d.get('tenant',{}).get('id',''))" "$RESP_A" 2>/dev/null)
 if [[ -z "$TOKEN_A" ]]; then
   echo "ERROR: signup tenant A failed: $RESP_A"; exit 1
 fi
 
-# ── Sign up tenant B
+# ── Sign up tenant B (with invite)
 RESP_B=$(curl -s -X POST http://localhost:30200/auth/signup \
   -H 'content-type: application/json' \
-  -d "{\"email\":\"verify-routing-b-${TS}@x.io\",\"password\":\"abcd1234abcd\",\"tenantName\":\"verify-routing-b-${TS}\"}")
+  -d "{\"email\":\"verify-routing-b-${TS}@x.io\",\"password\":\"abcd1234abcd\",\"tenantName\":\"verify-routing-b-${TS}\",\"inviteCode\":\"${INVITE_B}\"}")
 TOKEN_B=$(python3 -c "import sys,json; d=json.loads(sys.argv[1]); print(d.get('token',''))" "$RESP_B" 2>/dev/null)
 if [[ -z "$TOKEN_B" ]]; then
   echo "ERROR: signup tenant B failed: $RESP_B"; exit 1

@@ -1,9 +1,10 @@
 // Usage recording. Phase 1: synchronous INSERT into usage_events.
 // Phase 4 swaps this for a Kafka producer; the call sites won't change.
 
-import { query, logger } from '@9router-cloud/shared';
+import { query, logger, incrementTokenUsage } from '@9router-cloud/shared';
 
 export async function recordUsage(event) {
+  const totalTokens = (event.promptTokens ?? 0) + (event.completionTokens ?? 0);
   try {
     await query(`
       INSERT INTO usage_events (
@@ -23,7 +24,7 @@ export async function recordUsage(event) {
       event.upstreamModel ?? null,
       event.promptTokens ?? 0,
       event.completionTokens ?? 0,
-      (event.promptTokens ?? 0) + (event.completionTokens ?? 0),
+      totalTokens,
       event.costMicros ?? 0,
       event.status,
       event.latencyMs ?? null,
@@ -33,6 +34,16 @@ export async function recordUsage(event) {
     ]);
   } catch (err) {
     logger.error({ err: err.message, event }, 'failed to record usage');
+  }
+  // Bump the daily token quota counter regardless of status — any tokens that
+  // actually crossed the wire (including partial streams that later errored)
+  // should count against the tenant's daily cap.
+  if (totalTokens > 0 && event.tenantId) {
+    try {
+      await incrementTokenUsage(event.tenantId, totalTokens);
+    } catch (err) {
+      logger.warn({ err: err.message, tenantId: event.tenantId }, 'token quota incr failed');
+    }
   }
 }
 

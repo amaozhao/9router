@@ -10,6 +10,10 @@ export REDIS_URL='redis://localhost:56379/0'
 export CLOUD_MASTER_KEY="${CLOUD_MASTER_KEY:-+rB3s6hXL3gKZmhnywQQeMNUwiWSLkIo7wJRWa3BrY4=}"
 export JWT_SECRET='verify-jwt-secret'
 export MOCK_OAUTH_CLIENT_ID='cid-mock'
+# Tenant A's email is configured as super-admin so the legacy signup tests can
+# still bootstrap without an invite code; tenant B is created via a real invite
+# code (section 2b) to exercise the invite-code gate end-to-end.
+export SUPER_ADMIN_EMAILS='alice@v.test'
 
 PASS=0
 FAIL=0
@@ -40,7 +44,7 @@ assert_contains() {
 # ── reset
 docker exec 9router-cloud-redis redis-cli FLUSHALL > /dev/null
 docker exec 9router-cloud-pg psql -U router -d router -c \
-  "TRUNCATE tenants, users, api_keys, connections, combos, pricing, usage_events, usage_summaries, tenant_routing RESTART IDENTITY CASCADE" \
+  "TRUNCATE tenants, users, api_keys, connections, combos, pricing, usage_events, usage_summaries, tenant_routing, invite_codes, tenant_quotas RESTART IDENTITY CASCADE" \
   > /dev/null 2>&1
 
 # ── free any port we plan to bind so our processes win (otherwise an existing
@@ -95,12 +99,32 @@ RES=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:30200/auth
   -d '{"email":"x@y.z","password":"short"}')
 assert_eq "POST /auth/signup short pw → 400" '400' "$RES"
 
-# 2.4 signup tenant B (for isolation tests)
+# 2.4 invite-code gate: non-super-admin without code → 400
+RES=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:30200/auth/signup \
+  -H 'content-type: application/json' \
+  -d '{"email":"bob@v.test","password":"hunter22sercure"}')
+assert_eq "POST /auth/signup no-invite → 400" '400' "$RES"
+
+# 2.4b super-admin can mint an invite for bob
+INVITE_JSON=$(curl -s -X POST http://localhost:30200/api/admin/invites \
+  -H 'content-type: application/json' -H "Authorization: Bearer $TOK_A" \
+  -d '{"maxUses":1}')
+INVITE_CODE=$(echo "$INVITE_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('code',''))")
+assert_contains "POST /api/admin/invites returns code" '"code"' "$INVITE_JSON"
+
+# 2.4c non-super-admin signup with invite → 201
 RES_B=$(curl -s -X POST http://localhost:30200/auth/signup \
   -H 'content-type: application/json' \
-  -d '{"email":"bob@v.test","password":"hunter22sercure","tenantName":"B Co"}')
+  -d "{\"email\":\"bob@v.test\",\"password\":\"hunter22sercure\",\"tenantName\":\"B Co\",\"inviteCode\":\"$INVITE_CODE\"}")
 TOK_B=$(echo "$RES_B" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
-assert_contains "POST /auth/signup B" '"role":"owner"' "$RES_B"
+assert_contains "POST /auth/signup B with invite" '"role":"owner"' "$RES_B"
+assert_contains "POST /auth/signup B default key" '"defaultApiKey"' "$RES_B"
+
+# 2.4d invite code now exhausted → reuse fails
+RES=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:30200/auth/signup \
+  -H 'content-type: application/json' \
+  -d "{\"email\":\"carol@v.test\",\"password\":\"hunter22sercure\",\"inviteCode\":\"$INVITE_CODE\"}")
+assert_eq "POST /auth/signup reused invite → 400" '400' "$RES"
 
 # 2.5 login
 RES=$(curl -s -X POST http://localhost:30200/auth/login \
@@ -137,15 +161,15 @@ KEY_A=$(echo "$RES" | python3 -c "import sys,json; print(json.load(sys.stdin).ge
 KID_A=$(echo "$RES" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
 assert_contains "POST /api/keys A returns plaintext" 'sk-9r-' "$KEY_A"
 
-# 3.2 list (A sees 1)
+# 3.2 list (A sees 2: signup-default + the one just minted in 3.1)
 RES=$(curl -s http://localhost:30200/api/keys -H "Authorization: Bearer $TOK_A")
 COUNT=$(echo "$RES" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['items']))")
-assert_eq "GET /api/keys A count=1" '1' "$COUNT"
+assert_eq "GET /api/keys A count=2 (default + minted)" '2' "$COUNT"
 
-# 3.3 tenant B cannot see A's keys
+# 3.3 tenant B sees only its own auto-generated default key (1, isolation)
 RES=$(curl -s http://localhost:30200/api/keys -H "Authorization: Bearer $TOK_B")
 COUNT=$(echo "$RES" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['items']))")
-assert_eq "GET /api/keys B count=0 (isolation)" '0' "$COUNT"
+assert_eq "GET /api/keys B count=1 (default only, isolation)" '1' "$COUNT"
 
 # 3.4 revoke
 RES=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
@@ -419,6 +443,38 @@ COUNT_B=$(docker exec 9router-cloud-pg psql -U router -d router -tA -c "SELECT c
 [[ "$COUNT_A" -gt 0 ]] && { PASS=$((PASS+1)); RESULTS+=("  ✓ usage_summaries has tenant 1 rows ($COUNT_A)"); } \
                       || { FAIL=$((FAIL+1)); RESULTS+=("  ✗ tenant 1 has 0 summary rows"); }
 assert_eq "usage_summaries tenant 2 has 0 rows (no usage)" '0' "$COUNT_B"
+
+echo "════════════════════════════════════════════════════════════════"
+echo "  11.5  Daily quota + super-admin tenant overrides"
+echo "════════════════════════════════════════════════════════════════"
+# GET /api/me/quota for tenant A — fresh tenants get the 'free' plan defaults.
+RES=$(curl -s http://localhost:30200/api/me/quota -H "Authorization: Bearer $TOK_A")
+assert_contains "GET /api/me/quota tokens limit"   '"limit":100000' "$RES"
+assert_contains "GET /api/me/quota requests limit" '"limit":1000'   "$RES"
+
+# Super-admin can list all tenants
+RES=$(curl -s http://localhost:30200/api/admin/tenants -H "Authorization: Bearer $TOK_A")
+assert_contains "GET /api/admin/tenants includes A"   '"name":"A Co"' "$RES"
+assert_contains "GET /api/admin/tenants includes B"   '"name":"B Co"' "$RES"
+
+# Non-super-admin (tenant B) → 403
+RES=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:30200/api/admin/tenants \
+  -H "Authorization: Bearer $TOK_B")
+assert_eq "GET /api/admin/tenants by non-super → 403" '403' "$RES"
+
+# Super-admin overrides tenant B's daily limits
+TENANT_B_ID=$(curl -s http://localhost:30200/auth/me -H "Authorization: Bearer $TOK_B" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['tenant']['id'])")
+RES=$(curl -s -o /dev/null -w '%{http_code}' -X PUT \
+  "http://localhost:30200/api/admin/tenants/$TENANT_B_ID/quota" \
+  -H 'content-type: application/json' -H "Authorization: Bearer $TOK_A" \
+  -d '{"dailyTokenLimit":42000,"dailyRequestLimit":50,"note":"verify"}')
+assert_eq "PUT /api/admin/tenants/:id/quota → 200" '200' "$RES"
+
+# B's quota now reflects the override (cache invalidated)
+RES=$(curl -s http://localhost:30200/api/me/quota -H "Authorization: Bearer $TOK_B")
+assert_contains "GET /api/me/quota B tokens limit override"   '"limit":42000' "$RES"
+assert_contains "GET /api/me/quota B requests limit override" '"limit":50'    "$RES"
 
 echo "════════════════════════════════════════════════════════════════"
 echo "  12. Admin UI static assets"

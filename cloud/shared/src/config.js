@@ -20,6 +20,12 @@ function int(name, fallback) {
   return n;
 }
 
+function csvLower(name, fallback = []) {
+  const v = process.env[name];
+  if (v === undefined || v === '') return fallback;
+  return v.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+}
+
 export const config = Object.freeze({
   databaseUrl: required('DATABASE_URL'),
   redisUrl: required('REDIS_URL'),
@@ -30,8 +36,15 @@ export const config = Object.freeze({
   logLevel: optional('LOG_LEVEL', 'info'),
   nodeEnv: optional('NODE_ENV', 'development'),
   apiKeyCacheTtlSec: int('APIKEY_CACHE_TTL', 300),
+  // Lowercased CSV; users whose email matches any entry are treated as global super-admins.
+  superAdminEmails: csvLower('SUPER_ADMIN_EMAILS', []),
 });
 
 export function isProd() {
   return config.nodeEnv === 'production';
+}
+
+export function isSuperAdminEmail(email) {
+  if (!email) return false;
+  return config.superAdminEmails.includes(String(email).toLowerCase());
 }

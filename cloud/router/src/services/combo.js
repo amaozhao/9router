@@ -60,10 +60,14 @@ export async function resolveAttempts(tenantId, modelInput) {
   // because that's the only OpenAI-side route a user normally has without
   // an API key. Callers who want the api-key OpenAI path can still send
   // `openai:gpt-4` explicitly.
+  // Subscription-first defaults: bare `claude-*` / `gpt-*` / `o*` models route
+  // to the subscription executors because that's the only path most users have
+  // without an API key. Callers who want the api-key Anthropic/OpenAI paths
+  // can still send `anthropic:claude-...` or `openai:gpt-...` explicitly.
   let provider = 'openai';
   if (modelInput.startsWith('glm-')) provider = 'glm';
   else if (modelInput.startsWith('deepseek-')) provider = 'deepseek';
-  else if (modelInput.startsWith('claude-')) provider = 'anthropic';
+  else if (modelInput.startsWith('claude-')) provider = 'claude';
   else if (modelInput.startsWith('gemini-')) provider = 'gemini';
   else if (modelInput.startsWith('mock-')) provider = 'mock';
   else if (/^(gpt-|o\d|chatgpt-)/i.test(modelInput)) provider = 'codex';

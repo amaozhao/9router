@@ -22,6 +22,8 @@ import { listCombos, createCombo, updateCombo, deleteCombo } from './routes/comb
 import { listRouting, putRouting, deleteRouting } from './routes/routing.js';
 import { summary as usageSummary, recent as usageRecent } from './routes/usage.js';
 import { listOauthProviders, startOauth, oauthCallback, importOauth } from './routes/oauth.js';
+import { listInvites, createInvite, disableInvite } from './routes/invites.js';
+import { meQuota, listTenants, putTenantQuota } from './routes/quota.js';
 
 const log = logger.child({ svc: 'admin' });
 
@@ -55,6 +57,14 @@ const routes = [
   { method: 'POST',   pattern: '/api/oauth/:provider/start',    handler: startOauth },
   { method: 'POST',   pattern: '/api/oauth/:provider/import',   handler: importOauth },
   { method: 'GET',    pattern: '/api/oauth/callback',           handler: oauthCallback },
+
+  { method: 'GET',    pattern: '/api/admin/invites',            handler: listInvites },
+  { method: 'POST',   pattern: '/api/admin/invites',            handler: createInvite },
+  { method: 'DELETE', pattern: '/api/admin/invites/:code',      handler: disableInvite },
+
+  { method: 'GET',    pattern: '/api/me/quota',                 handler: meQuota },
+  { method: 'GET',    pattern: '/api/admin/tenants',            handler: listTenants },
+  { method: 'PUT',    pattern: '/api/admin/tenants/:id/quota',  handler: putTenantQuota },
 ];
 
 const server = http.createServer(async (req, res) => {

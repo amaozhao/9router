@@ -12,6 +12,7 @@ import {
   logger, ValidationError, UpstreamError, AuthError,
   NoAccountAvailableError, AppError,
 } from '@9router-cloud/shared';
+import { enforceDailyQuota } from '@9router-cloud/shared';
 import { resolveApiKey, enforceTenantActive } from '../middleware/edgeAuth.js';
 import { enforceRateLimit } from '../middleware/rateLimit.js';
 import { pickAccount, markCooldown } from '../services/accountPicker.js';
@@ -32,8 +33,9 @@ export async function handleChatCompletions(req, res) {
   const ctx = await resolveApiKey(apiKey);
   enforceTenantActive(ctx);
 
-  // 1b) Rate limit (per-key and per-tenant plan)
+  // 1b) Rate limit (per-key and per-tenant plan) + daily quota
   await enforceRateLimit(ctx);
+  await enforceDailyQuota(ctx);
 
   // 2) Body
   const body = await readJson(req);

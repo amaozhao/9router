@@ -57,11 +57,9 @@ func GenerateAPIKey() (plaintext, hashHex, keyPrefix string, err error) {
 	if _, err = rand.Read(raw); err != nil {
 		return "", "", "", err
 	}
+	// 20 bytes base64url (no padding) = 27 chars; matches Node generator.
 	body := base64.RawURLEncoding.EncodeToString(raw)
-	if len(body) < 28 {
-		return "", "", "", errors.New("base64url encode shorter than expected")
-	}
-	plaintext = "sk-lr-" + body[:28]
+	plaintext = "sk-lr-" + body
 	hashHex = SHA256Hex(plaintext)
 	keyPrefix = plaintext[:14]
 	return

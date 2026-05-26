@@ -1,11 +1,4 @@
 // router — client-facing entry point (default :30100).
-// Routes (incremental port from Node router/src/server.js):
-//   GET  /health
-//   POST /v1/chat/completions
-//   POST /v1/messages
-//   POST /v1/responses
-//   POST /v1/embeddings
-//   GET  /v1/models
 package main
 
 import (
@@ -22,7 +15,9 @@ import (
 	"github.com/amaozhao/lazirouter/internal/config"
 	"github.com/amaozhao/lazirouter/internal/db"
 	"github.com/amaozhao/lazirouter/internal/logger"
+	"github.com/amaozhao/lazirouter/internal/provider"
 	"github.com/amaozhao/lazirouter/internal/redisx"
+	"github.com/amaozhao/lazirouter/internal/router"
 )
 
 func main() {
@@ -41,13 +36,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	deps := &router.Deps{Cfg: cfg, OpenAI: provider.NewOpenAI()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", health)
-	mux.HandleFunc("POST /v1/chat/completions", notImplemented)
-	mux.HandleFunc("POST /v1/messages", notImplemented)
-	mux.HandleFunc("POST /v1/responses", notImplemented)
-	mux.HandleFunc("POST /v1/embeddings", notImplemented)
-	mux.HandleFunc("GET /v1/models", notImplemented)
+	// mount /v1/* handlers
+	v1 := router.New(deps)
+	mux.Handle("/v1/", v1)
 
 	addr := fmt.Sprintf(":%d", cfg.RouterPort)
 	srv := &http.Server{
@@ -90,22 +84,12 @@ func health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func notImplemented(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]any{
-		"error": map[string]any{
-			"code":    "not_implemented",
-			"message": "Go port in progress; route not wired yet",
-		},
-	})
-}
-
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-// withAccessLog emits one JSON line per request, matching the Node "http" log.
 func withAccessLog(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

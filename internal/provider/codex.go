@@ -115,13 +115,11 @@ func (c *CodexSub) req(ctx context.Context, metadata map[string]any, body []byte
 	return req
 }
 
+// clientFor returns an *http.Client honoring per-connection metadata.proxy_url
+// or HTTPS_PROXY env (unless DISALLOW_ENV_PROXY=1). Internally caches one
+// client per proxy URL. Kept in sync with ClaudeSub.clientFor.
 func (c *CodexSub) clientFor(metadata map[string]any) *http.Client {
-	// Reuse the ClaudeSub clientFor logic via duplication-aware wrapper.
-	sub := &ClaudeSub{dispatchers: c.dispatchers, mu: c.mu}
-	cli := sub.clientFor(metadata)
-	// Propagate any new dispatcher entry back into our map
-	c.dispatchers = sub.dispatchers
-	return cli
+	return proxyClient(&c.mu, c.dispatchers, metadata)
 }
 
 // codexCloakBody enforces the backend's invariants:

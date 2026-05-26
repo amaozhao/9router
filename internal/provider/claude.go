@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"os"
 	"strings"
 	"sync"
 
@@ -124,34 +122,9 @@ func (c *ClaudeSub) do(ctx context.Context, metadata map[string]any, body []byte
 }
 
 // clientFor returns an *http.Client respecting per-connection proxy_url or
-// HTTPS_PROXY env (unless DISALLOW_ENV_PROXY=1).
+// HTTPS_PROXY env (unless DISALLOW_ENV_PROXY=1). Cache lives on the receiver.
 func (c *ClaudeSub) clientFor(metadata map[string]any) *http.Client {
-	proxy := stringFrom(metadata, "proxy_url")
-	if proxy == "" && os.Getenv("DISALLOW_ENV_PROXY") != "1" {
-		for _, k := range []string{"HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"} {
-			if v := os.Getenv(k); v != "" {
-				proxy = v
-				break
-			}
-		}
-	}
-	if proxy == "" {
-		return http.DefaultClient
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if cli, ok := c.dispatchers[proxy]; ok {
-		return cli
-	}
-	u, err := url.Parse(proxy)
-	if err != nil {
-		return http.DefaultClient
-	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.Proxy = http.ProxyURL(u)
-	cli := &http.Client{Transport: tr}
-	c.dispatchers[proxy] = cli
-	return cli
+	return proxyClient(&c.mu, c.dispatchers, metadata)
 }
 
 // claudeCloakBody injects billing header + fake user_id metadata when the token

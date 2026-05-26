@@ -25,16 +25,28 @@ import (
 
 // Deps is what cmd/router wires once at boot and shares with all handlers.
 type Deps struct {
-	Cfg    *config.Config
-	OpenAI *provider.OpenAI
+	Cfg       *config.Config
+	OpenAI    *provider.OpenAI
+	ClaudeSub *provider.ClaudeSub
+	CodexSub  *provider.CodexSub
 }
 
 func New(d *Deps) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", d.handleChatCompletions)
+	mux.HandleFunc("POST /v1/messages", d.handleMessages)
+	mux.HandleFunc("POST /v1/responses", d.handleResponses)
 	mux.HandleFunc("POST /v1/embeddings", d.handleEmbeddings)
 	mux.HandleFunc("GET /v1/models", d.handleModels)
 	return mux
+}
+
+// truthy is a small helper exported within the package.
+func truthy(v any) bool {
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	return false
 }
 
 var usageRe = regexp.MustCompile(`"usage"\s*:\s*\{[^}]*"prompt_tokens"\s*:\s*(\d+)[^}]*"completion_tokens"\s*:\s*(\d+)`)

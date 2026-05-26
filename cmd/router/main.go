@@ -36,7 +36,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	deps := &router.Deps{Cfg: cfg, OpenAI: provider.NewOpenAI()}
+	deps := &router.Deps{
+		Cfg:       cfg,
+		OpenAI:    provider.NewOpenAI(),
+		ClaudeSub: provider.NewClaudeSub(),
+		CodexSub:  provider.NewCodexSub(),
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", health)
 	// mount /v1/* handlers

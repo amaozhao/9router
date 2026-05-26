@@ -16,6 +16,7 @@ import (
 	"github.com/amaozhao/lazirouter/internal/logger"
 	"github.com/amaozhao/lazirouter/internal/picker"
 	"github.com/amaozhao/lazirouter/internal/quota"
+	"github.com/amaozhao/lazirouter/internal/scenario"
 	"github.com/amaozhao/lazirouter/internal/tenantctx"
 	"github.com/amaozhao/lazirouter/internal/translator"
 	"github.com/amaozhao/lazirouter/internal/usage"
@@ -61,7 +62,20 @@ func (d *Deps) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	stream := truthy(body["stream"])
 
-	attempts, err := combo.Resolve(r.Context(), ctx.TenantID, model)
+	effectiveModel := model
+	routedScenario := ""
+	if model == "auto" {
+		routedScenario = scenario.Classify(body)
+		target, err := scenario.ResolveTarget(r.Context(), ctx.TenantID, routedScenario)
+		if err != nil {
+			httpx.WriteError(w, err)
+			return
+		}
+		effectiveModel = target
+		logger.Info("auto-routing", "tenantId", ctx.TenantID, "scenario", routedScenario, "effectiveModel", effectiveModel)
+	}
+
+	attempts, err := combo.Resolve(r.Context(), ctx.TenantID, effectiveModel)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -84,6 +98,9 @@ func (d *Deps) handleMessages(w http.ResponseWriter, r *http.Request) {
 			TenantID: ctx.TenantID, APIKeyID: ctx.APIKeyID, ConnectionID: account.ConnectionID,
 			Provider: attempt.Provider, Model: model, UpstreamModel: attempt.UpstreamModel,
 			RequestID: reqID, Meta: map[string]any{"transport": "/v1/messages"},
+		}
+		if routedScenario != "" {
+			ueBase.RoutedModel = &effectiveModel
 		}
 
 		var callErr error

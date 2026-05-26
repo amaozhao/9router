@@ -82,6 +82,15 @@ func main() {
 	mux.HandleFunc("GET /api/admin/tenants", d.ListTenants)
 	mux.HandleFunc("PUT /api/admin/tenants/{id}/quota", d.PutTenantQuota)
 
+	// Auto-routing
+	mux.HandleFunc("GET /api/routing", d.ListRouting)
+	mux.HandleFunc("PUT /api/routing/{scenario}", d.PutRouting)
+	mux.HandleFunc("DELETE /api/routing/{scenario}", d.DeleteRouting)
+
+	// Usage
+	mux.HandleFunc("GET /api/usage/summary", d.UsageSummary)
+	mux.HandleFunc("GET /api/usage/recent", d.UsageRecent)
+
 	// Invites (super-admin)
 	mux.HandleFunc("POST /api/admin/invites", d.MintInvite)
 	mux.HandleFunc("GET /api/admin/invites", d.ListInvites)

@@ -9,11 +9,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/amaozhao/lazirouter/internal/errs"
 )
+
+// serverItemIDPattern matches item ids that the Codex backend generates server-side.
+// With store=false they cannot be re-resolved, so clients must not send them back.
+var serverItemIDPattern = regexp.MustCompile(`^(rs|fc|resp|msg)_`)
 
 // CodexSub speaks the OpenAI Responses API against ChatGPT's codex backend,
 // using a chatgpt.com OAuth access_token + cloak headers + deterministic
@@ -150,6 +156,43 @@ func codexCloakBody(body map[string]any) map[string]any {
 	if effort, ok := rs["effort"].(string); ok && effort != "" && effort != "none" {
 		if _, ok := out["include"]; !ok {
 			out["include"] = []any{"reasoning.encrypted_content"}
+		}
+	}
+	if input, ok := out["input"].([]any); ok {
+		out["input"] = sanitizeCodexInput(input)
+	}
+	return out
+}
+
+// sanitizeCodexInput rewrites the Responses-API input array to match what the
+// codex backend accepts when store=false:
+//   - role "system" → "developer" (keeps the content in the cacheable prefix)
+//   - drop bare server-generated item ids ("rs_…", "fc_…", "resp_…", "msg_…")
+//     and item_reference entries — they 404 when there's no stored state
+func sanitizeCodexInput(input []any) []any {
+	out := make([]any, 0, len(input))
+	for _, item := range input {
+		switch v := item.(type) {
+		case string:
+			if serverItemIDPattern.MatchString(strings.TrimSpace(v)) {
+				continue
+			}
+			out = append(out, v)
+		case map[string]any:
+			if t, _ := v["type"].(string); t == "item_reference" {
+				continue
+			}
+			if id, ok := v["id"].(string); ok && serverItemIDPattern.MatchString(id) {
+				delete(v, "id")
+			}
+			if r, _ := v["role"].(string); r == "system" {
+				if t, ok := v["type"]; !ok || t == "" || t == "message" {
+					v["role"] = "developer"
+				}
+			}
+			out = append(out, v)
+		default:
+			out = append(out, item)
 		}
 	}
 	return out

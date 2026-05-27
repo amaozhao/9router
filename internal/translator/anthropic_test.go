@@ -155,6 +155,88 @@ func TestMapFinishReason(t *testing.T) {
 	}
 }
 
+func TestSanitizeReadToolArgs(t *testing.T) {
+	cases := []struct {
+		name string
+		in   map[string]any
+		want map[string]any
+	}{
+		{
+			name: "drop empty pages on non-pdf",
+			in:   map[string]any{"file_path": "/tmp/a.txt", "pages": ""},
+			want: map[string]any{"file_path": "/tmp/a.txt"},
+		},
+		{
+			name: "drop pages on non-pdf even when shaped right",
+			in:   map[string]any{"file_path": "/tmp/a.txt", "pages": "1-5"},
+			want: map[string]any{"file_path": "/tmp/a.txt"},
+		},
+		{
+			name: "keep valid pages on pdf",
+			in:   map[string]any{"file_path": "/tmp/a.pdf", "pages": "1-5"},
+			want: map[string]any{"file_path": "/tmp/a.pdf", "pages": "1-5"},
+		},
+		{
+			name: "drop malformed pages on pdf",
+			in:   map[string]any{"file_path": "/tmp/a.pdf", "pages": "abc"},
+			want: map[string]any{"file_path": "/tmp/a.pdf"},
+		},
+		{
+			name: "coerce numeric-string limit + clamp >2000",
+			in:   map[string]any{"limit": "5000"},
+			want: map[string]any{"limit": float64(2000)},
+		},
+		{
+			name: "drop limit < 1",
+			in:   map[string]any{"limit": float64(0)},
+			want: map[string]any{},
+		},
+		{
+			name: "coerce negative offset to 0",
+			in:   map[string]any{"offset": float64(-3)},
+			want: map[string]any{"offset": float64(0)},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sanitizeToolInput("Read", c.in)
+			if !equalAny(c.in, c.want) {
+				t.Fatalf("got %+v, want %+v", c.in, c.want)
+			}
+		})
+	}
+}
+
+func TestOpenAIToAnthropicResponse_SanitizesReadArgs(t *testing.T) {
+	o := map[string]any{
+		"choices": []any{map[string]any{
+			"message": map[string]any{
+				"role": "assistant",
+				"tool_calls": []any{map[string]any{
+					"id": "call_1",
+					"function": map[string]any{
+						"name":      "Read",
+						"arguments": `{"file_path":"/tmp/x.txt","pages":"","limit":"100"}`,
+					},
+				}},
+			},
+			"finish_reason": "tool_calls",
+		}},
+	}
+	got := OpenAIToAnthropicResponse(o, "claude-3-5-sonnet")
+	content := got["content"].([]map[string]any)
+	if len(content) != 1 {
+		t.Fatalf("content length: %d", len(content))
+	}
+	input := content[0]["input"].(map[string]any)
+	if _, has := input["pages"]; has {
+		t.Fatalf("empty pages should be dropped: %+v", input)
+	}
+	if input["limit"] != float64(100) {
+		t.Fatalf("limit should coerce numeric string: %+v", input["limit"])
+	}
+}
+
 // Helpers
 func joinAll(b [][]byte) []byte {
 	out := []byte{}

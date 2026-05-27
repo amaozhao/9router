@@ -6,8 +6,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"regexp"
+	"strconv"
 	"strings"
 )
+
+// pdfPagesPattern accepts "N" or "N-M" page-range arguments for the Read tool.
+var pdfPagesPattern = regexp.MustCompile(`^\d+(?:-\d+)?$`)
 
 // AnthropicToOpenAIRequest takes an Anthropic body and returns an OpenAI body.
 // Both are loose map[string]any to avoid the type ceremony.
@@ -155,9 +160,13 @@ func OpenAIToAnthropicResponse(o map[string]any, requestedModel string) map[stri
 		for _, t := range tcs {
 			tc, _ := t.(map[string]any)
 			fn, _ := tc["function"].(map[string]any)
+			name := asString(fn["name"])
 			var input any = map[string]any{}
 			if args, ok := fn["arguments"].(string); ok && args != "" {
 				_ = json.Unmarshal([]byte(args), &input)
+			}
+			if m, ok := input.(map[string]any); ok {
+				sanitizeToolInput(name, m)
 			}
 			id, _ := tc["id"].(string)
 			if id == "" {
@@ -339,6 +348,58 @@ func (st *StreamTranslator) Usage() (int64, int64) {
 }
 
 // ---------- helpers ----------
+
+// sanitizeToolInput fixes bad tool args emitted by non-Anthropic models so
+// Claude Code's strict client-side validators don't trigger retry loops.
+// Currently only the Read tool needs coercion (numeric strings → numbers,
+// invalid pages dropped). Mirrors open-sse/translator/response/openai-to-claude.js.
+func sanitizeToolInput(toolName string, args map[string]any) {
+	name := strings.TrimPrefix(toolName, "proxy_")
+	if name == "Read" {
+		sanitizeReadArgs(args)
+	}
+}
+
+func sanitizeReadArgs(args map[string]any) {
+	if s, ok := args["limit"].(string); ok {
+		if n, err := strconv.Atoi(s); err == nil {
+			args["limit"] = float64(n)
+		}
+	}
+	if s, ok := args["offset"].(string); ok {
+		if n, err := strconv.Atoi(s); err == nil {
+			args["offset"] = float64(n)
+		}
+	}
+	if v, ok := args["limit"]; ok {
+		n := toInt(v)
+		switch {
+		case n > 2000:
+			args["limit"] = float64(2000)
+		case n < 1:
+			delete(args, "limit")
+		}
+	}
+	if v, ok := args["offset"]; ok {
+		if toInt(v) < 0 {
+			args["offset"] = float64(0)
+		}
+	}
+	if _, has := args["pages"]; has && !validPdfPagesArg(asString(args["file_path"]), args["pages"]) {
+		delete(args, "pages")
+	}
+}
+
+func validPdfPagesArg(filePath string, pages any) bool {
+	if !strings.HasSuffix(strings.ToLower(filePath), ".pdf") {
+		return false
+	}
+	s, ok := pages.(string)
+	if !ok || s == "" {
+		return false
+	}
+	return pdfPagesPattern.MatchString(s)
+}
 
 func sse(event string, payload map[string]any) []byte {
 	body, _ := json.Marshal(payload)

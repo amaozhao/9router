@@ -37,10 +37,11 @@ func main() {
 	}
 
 	deps := &router.Deps{
-		Cfg:       cfg,
-		OpenAI:    provider.NewOpenAI(),
-		ClaudeSub: provider.NewClaudeSub(),
-		CodexSub:  provider.NewCodexSub(),
+		Cfg:             cfg,
+		OpenAI:          provider.NewOpenAI(),
+		ClaudeSub:       provider.NewClaudeSub(),
+		CodexSub:        provider.NewCodexSub(),
+		AnthropicCompat: provider.NewAnthropicCompat(),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", health)

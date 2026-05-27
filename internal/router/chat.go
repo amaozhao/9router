@@ -26,10 +26,11 @@ import (
 
 // Deps is what cmd/router wires once at boot and shares with all handlers.
 type Deps struct {
-	Cfg       *config.Config
-	OpenAI    *provider.OpenAI
-	ClaudeSub *provider.ClaudeSub
-	CodexSub  *provider.CodexSub
+	Cfg             *config.Config
+	OpenAI          *provider.OpenAI
+	ClaudeSub       *provider.ClaudeSub
+	CodexSub        *provider.CodexSub
+	AnthropicCompat *provider.AnthropicCompat
 }
 
 func New(d *Deps) *http.ServeMux {

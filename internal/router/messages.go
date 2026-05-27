@@ -104,7 +104,8 @@ func (d *Deps) handleMessages(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var callErr error
-		if attempt.Provider == "claude" {
+		switch {
+		case attempt.Provider == "claude":
 			// Anthropic-native pass-through via Claude subscription executor.
 			body["model"] = attempt.UpstreamModel
 			if stream {
@@ -112,7 +113,22 @@ func (d *Deps) handleMessages(w http.ResponseWriter, r *http.Request) {
 			} else {
 				callErr = d.nonStreamClaude(r.Context(), w, account, body, ueBase, started, ctx.TenantID, requestedModel)
 			}
-		} else {
+		case stringFrom(account.Metadata, "protocol") == "anthropic_passthrough":
+			// Third-party Anthropic-compat endpoint (e.g. MiniMax Token Plan).
+			// No translation; forward Anthropic body verbatim, auth via x-api-key.
+			baseURL := stringFrom(account.Metadata, "base_url")
+			upstreamKey := stringFrom(account.Credentials, "api_key")
+			if baseURL == "" || upstreamKey == "" {
+				errsList = append(errsList, map[string]any{"step": attempt.Step, "reason": "anthropic_passthrough requires base_url + api_key"})
+				continue
+			}
+			body["model"] = attempt.UpstreamModel
+			if stream {
+				callErr = d.streamMessagesViaAnthropicCompat(r.Context(), w, baseURL, upstreamKey, account.Metadata, body, ueBase, started)
+			} else {
+				callErr = d.nonStreamMessagesViaAnthropicCompat(r.Context(), w, baseURL, upstreamKey, account.Metadata, body, ueBase, started)
+			}
+		default:
 			// OpenAI-compatible upstream via translator.
 			baseURL := stringFrom(account.Metadata, "base_url")
 			if baseURL == "" {
@@ -293,6 +309,74 @@ flush:
 		f.Flush()
 	}
 	prompt, completion := xlate.Usage()
+	pricing := usage.GetPricing(ctx, ue.TenantID, ue.Provider, ue.UpstreamModel)
+	ue.Status, ue.LatencyMs = "ok", time.Since(started).Milliseconds()
+	ue.PromptTokens, ue.CompletionTokens = prompt, completion
+	ue.CostMicros = usage.ComputeCost(pricing, prompt, completion)
+	_ = usage.Record(ctx, ue)
+	return nil
+}
+
+// --- anthropic-compat passthrough (third-party endpoints mimicking /v1/messages) ---
+
+func (d *Deps) nonStreamMessagesViaAnthropicCompat(ctx context.Context, w http.ResponseWriter, baseURL, apiKey string, metadata, body map[string]any, ue *usage.Event, started time.Time) error {
+	result, err := d.AnthropicCompat.ChatMessages(ctx, baseURL, apiKey, metadata, body)
+	if err != nil {
+		_ = usage.Record(ctx, errEvent(ue, started, err))
+		return err
+	}
+	u, _ := result["usage"].(map[string]any)
+	prompt := toI64Or(u, "input_tokens")
+	completion := toI64Or(u, "output_tokens")
+	pricing := usage.GetPricing(ctx, ue.TenantID, ue.Provider, ue.UpstreamModel)
+	ue.Status, ue.LatencyMs = "ok", time.Since(started).Milliseconds()
+	ue.PromptTokens, ue.CompletionTokens = prompt, completion
+	ue.CostMicros = usage.ComputeCost(pricing, prompt, completion)
+	_ = usage.Record(ctx, ue)
+	httpx.WriteJSON(w, http.StatusOK, result)
+	return nil
+}
+
+func (d *Deps) streamMessagesViaAnthropicCompat(ctx context.Context, w http.ResponseWriter, baseURL, apiKey string, metadata, body map[string]any, ue *usage.Event, started time.Time) error {
+	frames, errc := d.AnthropicCompat.StreamMessages(ctx, baseURL, apiKey, metadata, body)
+	var prompt, completion int64
+	headersSent := false
+	for {
+		select {
+		case frame, ok := <-frames:
+			if !ok {
+				goto done
+			}
+			if !headersSent {
+				w.Header().Set("content-type", "text/event-stream")
+				w.Header().Set("cache-control", "no-cache, no-transform")
+				w.Header().Set("connection", "keep-alive")
+				w.WriteHeader(http.StatusOK)
+				headersSent = true
+			}
+			_, _ = w.Write(frame)
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			p, c := scanAnthropicUsage(frame)
+			if p > 0 {
+				prompt = p
+			}
+			if c > 0 {
+				completion = c
+			}
+		case err := <-errc:
+			if !headersSent {
+				_ = usage.Record(ctx, errEvent(ue, started, err))
+				return err
+			}
+			logger.Warn("anthropic-compat stream error after headers sent", "err", err)
+			goto done
+		case <-ctx.Done():
+			return nil
+		}
+	}
+done:
 	pricing := usage.GetPricing(ctx, ue.TenantID, ue.Provider, ue.UpstreamModel)
 	ue.Status, ue.LatencyMs = "ok", time.Since(started).Milliseconds()
 	ue.PromptTokens, ue.CompletionTokens = prompt, completion

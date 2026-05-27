@@ -180,16 +180,22 @@ function Shell({ children, current, onNav }) {
 
 /* ─────────────────────────── Overview ─────────────────────────── */
 
-function QuotaBar({ used, limit }) {
-  if (limit == null) return html`<div class="quota-row"><span>${used.toLocaleString()}</span><b>无限制</b></div>`;
-  const ratio = limit > 0 ? Math.min(1, used / limit) : 0;
+function QuotaCell({ label, used, limit }) {
+  const unlimited = limit == null;
+  const ratio = !unlimited && limit > 0 ? Math.min(1, used / limit) : 0;
   const cls = ratio > 0.95 ? 'err' : ratio > 0.7 ? 'warn' : '';
   return html`
-    <div class="quota-row">
-      <span>${used.toLocaleString()} / ${limit.toLocaleString()}</span>
-      <b>${Math.round(ratio * 100)}%</b>
+    <div class="quota-cell">
+      <div class="quota-label">${label}</div>
+      <div class="quota-headline">
+        <span class="used">${used.toLocaleString()}</span>
+        ${unlimited
+          ? html`<span class="of-limit">无限制</span>`
+          : html`<span class="of-limit">/ ${limit.toLocaleString()}</span>`}
+        ${!unlimited && html`<span class="pct">${Math.round(ratio * 100)}%</span>`}
+      </div>
+      ${!unlimited && html`<div class="progress" style=${{ marginTop: 8 }}><div class=${`bar ${cls}`} style=${{ width: `${ratio * 100}%` }}></div></div>`}
     </div>
-    <div class="progress"><div class=${`bar ${cls}`} style=${{ width: `${ratio * 100}%` }}></div></div>
   `;
 }
 
@@ -209,38 +215,35 @@ function Overview() {
   }), { req: 0, err: 0, pt: 0, ct: 0, cost: 0 });
 
   return html`
-    <h1>过去 24 小时</h1>
+    <h1>概览</h1>
+    <p class="subtitle">过去 24 小时的请求、错误、token 用量和费用。</p>
     ${quota && html`
       <div class="card">
-        <h3 style=${{ margin: '0 0 12px' }}>今日额度（${quota.date} · 北京时区）</h3>
-        <div style=${{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-          <div>
-            <div class="muted" style=${{ fontSize: 12 }}>请求数</div>
-            <${QuotaBar} used=${quota.requests.used} limit=${quota.requests.limit} />
-          </div>
-          <div>
-            <div class="muted" style=${{ fontSize: 12 }}>Token 总数</div>
-            <${QuotaBar} used=${quota.tokens.used} limit=${quota.tokens.limit} />
-          </div>
+        <h3>今日额度 · ${quota.date} · 北京时区</h3>
+        <div class="quota-grid">
+          <${QuotaCell} label="请求数"   used=${quota.requests.used} limit=${quota.requests.limit} />
+          <${QuotaCell} label="Token 总数" used=${quota.tokens.used}   limit=${quota.tokens.limit}   />
         </div>
-        <p class="muted" style=${{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-          额度超过上限后所有请求会返回 429，次日 00:00（北京时间）自动重置。
+        <p class="muted" style=${{ fontSize: 12, marginTop: 16, marginBottom: 0 }}>
+          超过上限后所有请求会返回 429，次日 00:00（北京时间）自动重置。
         </p>
       </div>
     `}
     <div class="kpi">
-      <div class="stat"><div class="label">请求数</div><div class="value">${totals.req}</div></div>
-      <div class="stat"><div class="label">错误</div><div class="value">${totals.err}</div></div>
-      <div class="stat"><div class="label">输入 token</div><div class="value">${totals.pt}</div></div>
-      <div class="stat"><div class="label">输出 token</div><div class="value">${totals.ct}</div></div>
+      <div class="stat"><div class="label">请求数</div><div class="value">${totals.req.toLocaleString()}</div></div>
+      <div class="stat"><div class="label">错误</div><div class="value">${totals.err.toLocaleString()}</div></div>
+      <div class="stat"><div class="label">输入 token</div><div class="value">${totals.pt.toLocaleString()}</div></div>
+      <div class="stat"><div class="label">输出 token</div><div class="value">${totals.ct.toLocaleString()}</div></div>
       <div class="stat"><div class="label">费用 USD</div><div class="value">$${totals.cost.toFixed(4)}</div></div>
     </div>
     <div class="card">
-      <h3 style=${{ margin: '0 0 12px' }}>按 provider / model 拆分</h3>
+      <h3>按 provider / model 拆分</h3>
       <table>
         <thead><tr>
-          <th>Provider</th><th>Model</th><th>请求</th><th>错误</th>
-          <th>输入</th><th>输出</th><th>费用</th>
+          <th>Provider</th><th>Model</th>
+          <th class="num">请求</th><th class="num">错误</th>
+          <th class="num">输入</th><th class="num">输出</th>
+          <th class="num">费用</th>
         </tr></thead>
         <tbody>
           ${(data?.items || []).length === 0 ? html`<tr><td colSpan=${7} class="empty">还没有用量数据</td></tr>`
@@ -248,11 +251,11 @@ function Overview() {
             <tr key=${i}>
               <td>${r.provider}</td>
               <td class="mono">${r.model}</td>
-              <td>${r.requestCount}</td>
-              <td>${r.errorCount > 0 ? html`<span class="badge err">${r.errorCount}</span>` : '0'}</td>
-              <td>${r.promptTokens}</td>
-              <td>${r.completionTokens}</td>
-              <td class="mono">$${((r.costMicros || 0) / 1e6).toFixed(6)}</td>
+              <td class="num">${(r.requestCount || 0).toLocaleString()}</td>
+              <td class="num">${r.errorCount > 0 ? html`<span class="badge err">${r.errorCount}</span>` : '0'}</td>
+              <td class="num">${(r.promptTokens || 0).toLocaleString()}</td>
+              <td class="num">${(r.completionTokens || 0).toLocaleString()}</td>
+              <td class="num mono">$${((r.costMicros || 0) / 1e6).toFixed(6)}</td>
             </tr>
           `)}
         </tbody>
@@ -866,11 +869,14 @@ function Usage() {
   const [items, setItems] = useState([]);
   useEffect(() => { api('/api/usage/recent?limit=100').then(r => setItems(r.items)); }, []);
   return html`
-    <h1>最近 100 条请求</h1>
+    <h1>用量</h1>
+    <p class="subtitle">最近 100 条请求的明细。</p>
     <div class="card">
       <table>
         <thead><tr>
-          <th>时间</th><th>Provider</th><th>Model</th><th>输入</th><th>输出</th><th>费用 USD</th><th>延迟</th><th>状态</th>
+          <th>时间</th><th>Provider</th><th>Model</th>
+          <th class="num">输入</th><th class="num">输出</th>
+          <th class="num">费用 USD</th><th class="num">延迟</th><th>状态</th>
         </tr></thead>
         <tbody>
           ${items.length === 0 ? html`<tr><td colSpan=${8} class="empty">还没有用量记录</td></tr>`
@@ -879,10 +885,10 @@ function Usage() {
               <td class="muted">${new Date(r.ts).toLocaleString()}</td>
               <td>${r.provider}</td>
               <td class="mono">${r.model}</td>
-              <td>${r.promptTokens}</td>
-              <td>${r.completionTokens}</td>
-              <td class="mono">$${(r.costMicros / 1e6).toFixed(6)}</td>
-              <td>${r.latencyMs}ms</td>
+              <td class="num">${(r.promptTokens || 0).toLocaleString()}</td>
+              <td class="num">${(r.completionTokens || 0).toLocaleString()}</td>
+              <td class="num mono">$${((r.costMicros || 0) / 1e6).toFixed(6)}</td>
+              <td class="num">${r.latencyMs}ms</td>
               <td>${r.status === 'ok'
                 ? html`<span class="badge ok">ok</span>`
                 : html`<span class="badge err">${r.errorCode || 'error'}</span>`}</td>

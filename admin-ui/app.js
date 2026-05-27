@@ -205,7 +205,7 @@ function Overview() {
     err: a.err + r.errorCount,
     pt:  a.pt  + r.promptTokens,
     ct:  a.ct  + r.completionTokens,
-    cost: a.cost + r.costUsd,
+    cost: a.cost + (r.costMicros || 0) / 1e6,
   }), { req: 0, err: 0, pt: 0, ct: 0, cost: 0 });
 
   return html`
@@ -252,7 +252,7 @@ function Overview() {
               <td>${r.errorCount > 0 ? html`<span class="badge err">${r.errorCount}</span>` : '0'}</td>
               <td>${r.promptTokens}</td>
               <td>${r.completionTokens}</td>
-              <td class="mono">$${r.costUsd.toFixed(6)}</td>
+              <td class="mono">$${((r.costMicros || 0) / 1e6).toFixed(6)}</td>
             </tr>
           `)}
         </tbody>
